@@ -1,6 +1,37 @@
 #ifndef NOLIBC_H
 #define NOLIBC_H
 
+/* Vector ISA feature macros — available to both C and assembly */
+#if __riscv_v_elen >= 64
+#define IF_VE64(...) __VA_ARGS__
+#else
+#define IF_VE64(...)
+#endif
+
+#if __riscv_zfh >= 1000000
+#define IF_F16(...) __VA_ARGS__
+#else
+#define IF_F16(...)
+#endif
+
+#if __riscv_zvfh >= 1000000 && IF_F16(1)+0
+#define IF_VF16(...) __VA_ARGS__
+#else
+#define IF_VF16(...)
+#endif
+
+#if __riscv_flen == 64
+#define IF_F64(...) __VA_ARGS__
+#else
+#define IF_F64(...)
+#endif
+
+#if __riscv_v_elen_fp == 64
+#define IF_VF64(...) __VA_ARGS__
+#else
+#define IF_VF64(...)
+#endif
+
 #ifndef NOLIBC_DEFINE_ONLY
 
 #include <limits.h>
@@ -8,43 +39,36 @@
 #include <stddef.h>
 #include <float.h>
 
-#ifdef USE_PERF_EVENT_SLOW
-#define USE_PERF_EVENT
-#endif
-#ifdef USE_PERF_EVENT
-long nolibc_perf_event_fd = 0;
-#endif
-
-static int nolibc_init(void);
-
 #if __riscv_xlen == 32
 typedef uint32_t ux;
 typedef float fx;
+#define IF64(...)
 #else
 typedef uint64_t ux;
 typedef double fx;
+#define IF64(...) __VA_ARGS__
 #endif
+
 
 static void print_flush(void);
 
-/* needing to do this is so stupid */
-#define SYSCALL_VREGS \
-	"v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", \
-	"v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", \
-	"v20", "v21", "v22", "v23", "v24", "v25", "v26", "v27", "v28", "v29", \
-	"v30", "v31"
-#if (__clang_major__ <= 17 && __clang_major__ >= 13) || __GNUC__ == 13
-# define SYSCALL_CLOBBERS "a7", "memory", SYSCALL_VREGS
-#elif defined(__riscv_vector) || __clang_major__ >= 18 || __GNUC__ > 13
-# define SYSCALL_CLOBBERS "a7", "memory", \
-	SYSCALL_VREGS, "vl", "vtype", "vxrm", "vxsat"
-#else
-# define SYSCALL_CLOBBERS "a7", "memory"
-#endif
+static void flush(void);
+
+void _halt(int code);
+
+#define printf printf_
+int printf_(const char* format, ...);
+
+/*
+* set vector csr , open vector extension
+*/
+void reset_vector();
 
 #ifdef CUSTOM_HOST
 
 #define IFHOSTED(...)
+#define EXIT_FAILURE 1
+#define EXIT_SUCCESS 0
 
 /* customize me */
 static void
@@ -53,14 +77,16 @@ memwrite(void const *ptr, size_t len) { }
 // static size_t /* only needed for vector-utf/bench.c */
 // memread(void *ptr, size_t len) { }
 
+static void
+exit(int x) { __asm volatile("unimp\n"); }
+
 int main(void);
 
-void _start(void) {
-	int x = nolibc_init();
-	if (!x) x = main();
-	print_flush();
-	__asm__ volatile("unimp\n");
-}
+// void _start(void) {
+// 	int x = main();
+// 	print_flush();
+// 	exit(x);
+// }
 
 #elif __STDC_HOSTED__
 #include <string.h>
@@ -82,30 +108,65 @@ memread(void *ptr, size_t len)
 {
 	return fread(ptr, 1, len, stdin);
 }
+#ifndef ENABLE_RDCYCLE_HACK
 int main(void) {
-	int x = nolibc_init();
-	if (!x) x = nolibc_main();
+	int x = nolibc_main();
 	print_flush();
-	return x;
+	exit(x);
 }
+#else
+#include <linux/perf_event.h>
+#include <asm/unistd.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+
+int main(void) {
+	struct perf_event_attr pe = { 0 };
+	pe.type = PERF_TYPE_HARDWARE;
+	pe.size = sizeof pe;
+	pe.config = PERF_COUNT_HW_CPU_CYCLES;
+	pe.disabled = 0;
+	pe.exclude_kernel = 1;
+	long fd = syscall(__NR_perf_event_open, &pe, 0, -1, -1, 0);
+	if (fd < 0) perror("perf_event_open"),exit(EXIT_FAILURE);
+	int x = nolibc_main();
+	print_flush();
+	exit(x);
+}
+#endif
 #define main nolibc_main
 
 #else
 
 #define IFHOSTED(...)
 
+#define EXIT_FAILURE 1
+#define EXIT_SUCCESS 0
+
+static void
+exit(int x)
+{
+	__asm volatile(
+		"mv a0, %0\n"
+		"li a7, 93\n"
+		"ecall\n"
+	:
+	: "r"(x)
+	: "a0", "a7");
+}
+
 static void
 memwrite(void const *ptr, size_t len)
 {
-	__asm__ (
+	__asm volatile(
+		"li a0, 1\n"
 		"mv a1, %0\n"
 		"mv a2, %1\n"
-		"li a0, 1\n"
 		"li a7, 64\n"
 		"ecall\n"
-		:
-		: "r"(ptr), "r"(len)
-		: "a0", "a1", "a2", SYSCALL_CLOBBERS
+	:
+	: "r"(ptr), "r"(len)
+	: "a0", "a1", "a2", "a7"
 	);
 }
 
@@ -113,130 +174,43 @@ static size_t
 memread(void *ptr, size_t len)
 {
 	size_t ret;
-	__asm__ (
+	__asm volatile(
+		"li a0, 0\n"
 		"mv a1, %1\n"
 		"mv a2, %2\n"
-		"li a0, 0\n"
 		"li a7, 63\n"
 		"ecall\n"
 		"mv %0, a0\n"
-		: "=r"(ret)
-		: "r"(ptr), "r"(len)
-		: "a0", "a1", "a2", SYSCALL_CLOBBERS
+	: "=r"(ret)
+	: "r"(ptr), "r"(len)
+	: "a0", "a1", "a2", "a7"
 	);
 	return ret;
 }
 
 int main(void);
 
-void _start(void) {
-	int x = nolibc_init();
-	if (!x) x = main();
-	print_flush();
-	__asm__ (
-		"mv a0, %0\n"
-		"li a7, 93\n"
-		"ecall\n"
-		:
-		: "r"(x)
-		: "a0", SYSCALL_CLOBBERS
-	);
-}
+// void _start(void) {
+// 	int x = main();
+// 	print_flush();
+// 	exit(x);
+// }
 
 #endif
-
-static int
-nolibc_perf_event_open(void *ptr)
-{
-	int ret;
-	__asm__ (
-		"mv a0, %1\n"
-		"li a1, 0\n"
-		"li a2, -1\n"
-		"li a3, -1\n"
-		"li a4, 0\n"
-		"li a7, 241\n"
-		"ecall\n"
-		"mv %0, a0\n"
-		: "=r"(ret)
-		:  "r"(ptr)
-		: "a0", "a1", "a2", "a3", "a4", SYSCALL_CLOBBERS
-	);
-	return ret;
-}
-
-#if defined(USE_PERF_EVENT) && (IFHOSTED(1)+0 == 1)
-# include <linux/perf_event.h>
-# include <asm/unistd.h>
-# include <unistd.h>
-# include <sys/ioctl.h>
-#endif
-
-static int
-nolibc_init(void)
-{
-#if defined(USE_PERF_EVENT)
-#if IFHOSTED(1)+0
-	struct perf_event_attr pe = {0};
-	pe.exclude_kernel = 1;
-	pe.exclude_hv = 1;
-	pe.type = PERF_TYPE_HARDWARE;
-	pe.config = PERF_COUNT_HW_CPU_CYCLES;
-#else
-	struct nolibc_perf_event_attr {
-		uint32_t type, size;
-		uint64_t config, pad0[3], flags, pad1[10];
-	} pe = {0};
-	pe.flags = 1 << 5;
-#endif
-	pe.size = sizeof pe;
-	nolibc_perf_event_fd = nolibc_perf_event_open(&pe);
-	if (nolibc_perf_event_fd <= 0) {
-		memwrite("ERROR: perf_event_open failed", 30);
-		return 1;
-	}
-#endif
-	return 0;
-}
-
 
 /* utils */
 
-#if defined(__x86_64__)
-#include <x86intrin.h>
-static inline ux rv_cycles(void) { return __rdtsc(); }
-#elif !__riscv
-static inline ux rv_cycles(void) { return 0; }
-#elif !defined(USE_PERF_EVENT_SLOW)
 static inline ux
 rv_cycles(void)
 {
 	ux cycle;
-#if defined(READ_MCYCLE)
-	__asm__ volatile ("csrr %0, mcycle" : "=r"(cycle));
+#ifdef READ_MCYCLE
+	__asm volatile ("csrr %0, mcycle" : "=r"(cycle));
 #else
-	__asm__ volatile ("csrr %0, cycle" : "=r"(cycle));
+	__asm volatile ("csrr %0, cycle" : "=r"(cycle));
 #endif
 	return cycle;
 }
-#else
-uint64_t nolibc_perf_event_buf;
-static ux
-rv_cycles(void)
-{
-	uint64_t ret;
-	__asm__ (
-		"ld a0, nolibc_perf_event_fd\n"
-		"la a1, nolibc_perf_event_buf\n"
-		"li a2, 8\n"
-		"li a7, 63\n"
-		"ecall\n"
-		"ld %0, nolibc_perf_event_buf\n"
-		: "=r"(ret) :: "a0", "a1", "a2", SYSCALL_CLOBBERS
-	);
-	return ret;
-}
-#endif
 
 
 static void
@@ -252,7 +226,7 @@ memswap(void *a, void *b, size_t size)
 }
 
 #if !__STDC_HOSTED__
-void *
+static void *
 memcpy(void *restrict dest, void const *restrict src, size_t n)
 {
 	unsigned char *d = dest;
@@ -261,7 +235,7 @@ memcpy(void *restrict dest, void const *restrict src, size_t n)
 	return dest;
 }
 
-void *
+static void *
 memset(void *dest, int c, size_t n)
 {
 	unsigned char *d = dest;
@@ -269,7 +243,7 @@ memset(void *dest, int c, size_t n)
 	return dest;
 }
 
-size_t
+static size_t
 strlen(char const *str)
 {
 	size_t len = 0;
@@ -277,7 +251,7 @@ strlen(char const *str)
 	return len;
 }
 
-void
+static void
 qsort(void *base, size_t len, size_t size, int (*cmp)(const void *, const void *))
 {
 	if (len < 2) return;
@@ -287,13 +261,14 @@ qsort(void *base, size_t len, size_t size, int (*cmp)(const void *, const void *
 		while (cmp(b + l*size, b + pivot*size) < 0) ++l;
 		while (cmp(b + h*size, b + pivot*size) > 0) --h;
 		if (l >= h) break;
-		memswap(b + l*size, b + h*size, size);
+		memswap( b + l*size, b + h*size, size);
 		pivot = pivot == l ? h : pivot == h ? l : pivot;
 	}
 	qsort(b, l, size, cmp);
 	qsort(b + h * size + size, len - h - 1, size, cmp);
 }
 #endif
+
 
 static ux
 usqrt(ux y)
@@ -332,7 +307,7 @@ typedef struct { ux x, y, z; } URand;
 
 #define ROTL(x,n) (((x) << (n)) | ((x) >> (8*sizeof(x) - (n))))
 
-/* RomuTrio, see https://romu-random.org/ */
+/* RomuDuoJr, see https://romu-random.org/ */
 static inline ux
 urand(URand *r)
 {
@@ -350,7 +325,8 @@ urand(URand *r)
 }
 
 static inline float
-urandf(URand *r) {
+urandf(URand *r)
+{
 	uint32_t x = urand(r);
 	return (x >> (32-24)) * (1.0f / (((uint32_t)1) << 24));
 }
@@ -443,7 +419,6 @@ print_raw(const char *s, size_t len)
 }
 
 static void print_s(const char *s) { print_raw(s, strlen(s)); }
-static void print_c(const char s) { print_raw(&s, 1); }
 
 static void
 print_u(ux val)
@@ -512,43 +487,6 @@ static const char PRINT_A = 0, PRINT_B = 0;
 # define PRINT_B1(...) PRINT_NEXT(__VA_ARGS__) PRINT_B2
 #endif
 
-#endif
-
-#if __riscv_xlen == 32
-#define IF64(...)
-#else
-#define IF64(...) __VA_ARGS__
-#endif
-
-#if __riscv_v_elen >= 64
-#define IF_VE64(...) __VA_ARGS__
-#else
-#define IF_VE64(...)
-#endif
-
-#if __riscv_zfh >= 1000000
-#define IF_F16(...) __VA_ARGS__
-#else
-#define IF_F16(...)
-#endif
-
-#if __riscv_zvfh >= 1000000 && IF_F16(1)+0
-#define IF_VF16(...) __VA_ARGS__
-#else
-#define IF_VF16(...)
-#endif
-
-#if __riscv_flen == 64
-#define IF_F64(...) __VA_ARGS__
-#else
-#define IF_F64(...)
-#endif
-
-#if __riscv_v_elen_fp == 64
-#define IF_VF64(...) __VA_ARGS__
-#else
-#define IF_VF64(...)
-#endif
-
+#endif /* NOLIBC_DEFINE_ONLY */
 #endif
 

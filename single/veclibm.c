@@ -1,11 +1,31 @@
 #include <riscv_vector.h>
-
 #include <math.h>
-#include <stdlib.h>
 #include <stdio.h>
+
+#include "../nolibc.h"
 
 #ifndef N
 #define N (1024*128) /* change me */
+#endif
+
+/* Bare-metal: enable vector extension in mstatus */
+void reset_vector(void) {
+	unsigned long mstatus;
+	__asm__ volatile ("csrr %0, mstatus" : "=r"(mstatus));
+	mstatus |= (0x3UL << 9);  /* VS = Dirty, enables vector instructions */
+	mstatus |= (0x3UL << 13); /* FS = Dirty, enables FPU */
+	__asm__ volatile ("csrw mstatus, %0" :: "r"(mstatus));
+}
+
+/* Bare-metal stubs for newlib libm dependencies */
+int   __errno;
+struct _reent;
+static char impure_storage[1024];
+struct _reent *_impure_ptr = (struct _reent *)impure_storage;
+
+#ifndef CUSTOM_HOST
+static double veclibm_in[N];
+static double veclibm_out[N];
 #endif
 
 static void
@@ -24,6 +44,13 @@ X(sqrt) X(cbrt) \
 X(sin) X(cos) X(tan) X(asin) X(acos) X(atan) \
 X(sinh) X(cosh) X(tanh) X(asinh) X(acosh) X(atanh) \
 X(erf) X(erfc) X(tgamma) X(lgamma)
+
+/* -DTEST_FUNC=exp  selects a single function for standalone testing */
+#ifdef TEST_FUNC
+#undef APPLY
+#define APPLY_(X, f) X(f)
+#define APPLY(X) APPLY_(X, TEST_FUNC)
+#endif
 
 #define DECLARE(f) void rvvlm_##f(size_t x_len, const double *x, double *y);
 APPLY(DECLARE)
@@ -44,25 +71,16 @@ struct Func funcs[] = {
 APPLY(ENTRY)
 };
 
-typedef struct { uint64_t x, y, z; } URand;
-
-/* RomuDuoJr, see https://romu-random.org/ */
-static inline uint64_t
-urand(URand *r)
-{
-#define ROTL(x,n) (((x) << (n)) | ((x) >> (8*sizeof(x) - (n))))
-	uint64_t xp = r->x, yp = r->y, zp = r->z;
-	r->x = 15241094284759029579u * zp;
-	r->y = ROTL(yp - xp, 12);
-	r->z = ROTL(zp - yp, 44);
-	return xp;
-}
-
-
 int
 main(void)
 {
+	reset_vector();
+#ifdef CUSTOM_HOST
 	double *in = malloc(N*sizeof *in), *out = malloc(N*sizeof *out);
+#else
+	double *in  = veclibm_in;
+	double *out = veclibm_out;
+#endif
 	URand r = {123, (uintptr_t)&in, (uintptr_t)&out};
 
 	for (size_t i = 0; i < N; ++i)
@@ -87,8 +105,10 @@ main(void)
 		}
 		printf(" elements/cycle\n");
 	}
+#ifdef CUSTOM_HOST
 	free(in);
 	free(out);
+#endif
 	return 0;
 }
 

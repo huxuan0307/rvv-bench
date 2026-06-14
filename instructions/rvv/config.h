@@ -1,7 +1,7 @@
 
 #define WARMUP 1000
 #define UNROLL 8
-#define LOOP 512
+#define LOOP 64
 #define RUNS 32
 
 // processor specific configs

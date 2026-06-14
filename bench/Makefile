@@ -30,7 +30,10 @@ trans8x8e16: trans8x8e16.S
 ${EXECS}: config.h bench.h template.S ../config.mk
 
 .c:
-	${CC} ${CFLAGS} -o $@ $< -DINC=$@.S template.S
+	${CC} ${CFLAGS} -o $@ $< -DINC=$@.S template.S \
+		-T ../thirdparty/link.ld \
+		../thirdparty/am-riscv64-xs.a \
+		../thirdparty/klib-riscv64-xs.a
 
 clean:
 	rm -f ${EXECS}
