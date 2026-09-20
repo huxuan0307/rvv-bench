@@ -4,8 +4,8 @@
 
 #include "../nolibc.h"
 
-#ifndef N
-#define N (1024*128) /* change me */
+#ifndef VECLIBM_N
+#define VECLIBM_N (1024*128)
 #endif
 
 /* Bare-metal: enable vector extension in mstatus */
@@ -24,8 +24,8 @@ static char impure_storage[1024];
 struct _reent *_impure_ptr = (struct _reent *)impure_storage;
 
 #ifndef CUSTOM_HOST
-static double veclibm_in[N];
-static double veclibm_out[N];
+static double veclibm_in[VECLIBM_N];
+static double veclibm_out[VECLIBM_N];
 #endif
 
 static void
@@ -76,14 +76,14 @@ main(void)
 {
 	reset_vector();
 #ifdef CUSTOM_HOST
-	double *in = malloc(N*sizeof *in), *out = malloc(N*sizeof *out);
+	double *in = malloc(VECLIBM_N*sizeof *in), *out = malloc(VECLIBM_N*sizeof *out);
 #else
 	double *in  = veclibm_in;
 	double *out = veclibm_out;
 #endif
 	URand r = {123, (uintptr_t)&in, (uintptr_t)&out};
 
-	for (size_t i = 0; i < N; ++i)
+	for (size_t i = 0; i < VECLIBM_N; ++i)
 		in[i] = (urand(&r) >> (64 - 53)) * (1.0 / (1ull << 53));
 
 	for (size_t i = 0; i < sizeof funcs / sizeof *funcs; ++i) {
@@ -92,16 +92,16 @@ main(void)
 		printf("%s libm: ", f.name);
 		for (size_t i = 0; i < 3; ++i) {
 			__asm__ volatile ("csrr %0, cycle" : "=r"(beg));
-			f.lm(N, in, out);
+			f.lm(VECLIBM_N, in, out);
 			__asm__ volatile ("csrr %0, cycle" : "=r"(end));
-			printf(" %f", ((double)N) / (end-beg));
+			printf(" %f", ((double)VECLIBM_N) / (end-beg));
 		}
 		printf(" elements/cycle\n%s rvvlm:", f.name);
 		for (size_t i = 0; i < 3; ++i) {
 			__asm__ volatile ("csrr %0, cycle" : "=r"(beg));
-			f.rvvlm(N, in, out);
+			f.rvvlm(VECLIBM_N, in, out);
 			__asm__ volatile ("csrr %0, cycle" : "=r"(end));
-			printf(" %f", ((double)N) / (end-beg));
+			printf(" %f", ((double)VECLIBM_N) / (end-beg));
 		}
 		printf(" elements/cycle\n");
 	}

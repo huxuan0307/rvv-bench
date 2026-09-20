@@ -7,9 +7,12 @@ VECLIBM_FUNCS = exp exp2 expm1 log log10 log2 log1p sqrt cbrt \
                 sinh cosh tanh asinh acosh atanh \
                 erf erfc tgamma lgamma
 
-# all output under build/
-VECLIBM_ELFS  = $(VECLIBM_FUNCS:%=build/veclibm-%.elf)
-EXECS         = build/uarch.elf build/veclibm.elf ${VECLIBM_ELFS}
+# data size (number of double-precision elements, ~1MB per array at default)
+VECLIBM_N ?= 131072
+
+# all output under build/ — names include data size, e.g. veclibm-sqrt-n131072.elf
+VECLIBM_ELFS  = $(VECLIBM_FUNCS:%=build/veclibm-%-n$(VECLIBM_N).elf)
+EXECS         = build/uarch.elf build/veclibm-n$(VECLIBM_N).elf ${VECLIBM_ELFS}
 DASMS         = $(EXECS:.elf=.dasm)
 BINS          = $(EXECS:.elf=.bin)
 
@@ -53,9 +56,10 @@ build/veclibm-obj/%.o: $(VECLIBM_SRC_DIR)/%.c
 
 # --- veclibm full (all 25 functions in one binary) ---
 # Uses lm_stubs.o (compiled medany) instead of -lm (precompiled medlow can't reach 0x80000000)
-build/veclibm.elf: veclibm.c build/veclibm.a build/lm_stubs.o
+build/veclibm-n$(VECLIBM_N).elf: veclibm.c build/veclibm.a build/lm_stubs.o
 	@echo "  LD    $@"
-	@${CC} -nostdlib $(VECLIBM_CFLAGS) -o $@ $< build/veclibm.a build/lm_stubs.o \
+	@${CC} -nostdlib $(VECLIBM_CFLAGS) -DVECLIBM_N=$(VECLIBM_N) \
+		-o $@ $< build/veclibm.a build/lm_stubs.o \
 		-T ../thirdparty/link.ld \
 		../thirdparty/am-riscv64-xs.a \
 		../thirdparty/klib-riscv64-xs.a
@@ -64,10 +68,11 @@ build/veclibm.elf: veclibm.c build/veclibm.a build/lm_stubs.o
 	@echo "  OBJCP $(@:.elf=.bin)"
 	@${OBJCOPY} -S --set-section-flags .bss=alloc,contents -O binary $@ $(@:.elf=.bin)
 
-# --- veclibm per-function (e.g. make build/veclibm-exp.elf) ---
-build/veclibm-%.elf: veclibm.c build/veclibm.a build/lm_stubs.o
+# --- veclibm per-function (e.g. make build/veclibm-exp-n131072.elf) ---
+build/veclibm-%-n$(VECLIBM_N).elf: veclibm.c build/veclibm.a build/lm_stubs.o
 	@echo "  LD    $@ (-DTEST_FUNC=$*)"
-	@${CC} -nostdlib $(VECLIBM_CFLAGS) -DTEST_FUNC=$* -o $@ $< build/veclibm.a build/lm_stubs.o \
+	@${CC} -nostdlib $(VECLIBM_CFLAGS) -DVECLIBM_N=$(VECLIBM_N) -DTEST_FUNC=$* \
+		-o $@ $< build/veclibm.a build/lm_stubs.o \
 		-T ../thirdparty/link.ld \
 		../thirdparty/am-riscv64-xs.a \
 		../thirdparty/klib-riscv64-xs.a
@@ -83,8 +88,20 @@ build/lm_stubs.o: lm_stubs.c
 	@${CC} $(VECLIBM_CFLAGS) -c -o $@ $<
 
 # --- convenience ---
+# build all per-function tests at current data size
 veclibm-all: ${VECLIBM_ELFS}
 	@true
+
+# data sizes for sweep: 4^0 .. 4^8 (max <= 128K)
+VECLIBM_SIZES = 1 4 16 64 256 1024 4096 16384 65536
+
+# build all functions for ALL data sizes
+veclibm-sweep:
+	@for n in $(VECLIBM_SIZES); do \
+		echo "=== VECLIBM_N=$$n ==="; \
+		$(MAKE) VECLIBM_N=$$n veclibm-all || exit 1; \
+	done
+	@echo "=== sweep done: $(words $(VECLIBM_SIZES)) sizes x $(words $(VECLIBM_FUNCS)) funcs ==="
 
 dasm: ${EXECS}
 bin:  ${EXECS}
