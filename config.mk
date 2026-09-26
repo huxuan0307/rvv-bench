@@ -13,7 +13,8 @@ OBJCOPY=${TOOL_CHAIN_PREFIX}objcopy
 CFLAGS= \
 	-march=rv64gcv_zba_zbb_zbs_zvbb -mcmodel=medany \
 	-fno-builtin -nostdlib -ffreestanding -D__BYTE_ORDER=__LITTLE_ENDIAN \
-	-O2 -g ${WARN}
+	-O2 -g ${WARN} \
+	-Wl,--wrap=_trm_init
 #CFLAGS=--target=riscv32 -march=rv32gc_zve32f_zba_zbb_zbs -O3 ${WARN} -nostdlib -fno-builtin -ffreestanding
 
 # full cross compilation toolchain

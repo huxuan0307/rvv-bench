@@ -124,5 +124,6 @@ main(void)
 			}
 		}
 	}
+	print_flush();
 	return 0;
 }

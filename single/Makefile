@@ -24,7 +24,8 @@ VECLIBM_OBJ     = $(VECLIBM_SRC:$(VECLIBM_SRC_DIR)/%.c=build/veclibm-obj/%.o)
 
 VECLIBM_CFLAGS = -march=rv64gcv_zba_zbb_zbs_zvbb -mcmodel=medany -O2 -g ${WARN} \
                   -I $(VECLIBM_INC_DIR) -Wno-unused -Wno-maybe-uninitialized \
-                  -fno-builtin-printf -ffreestanding
+                  -fno-builtin-printf -ffreestanding \
+                  -Wl,--wrap=_trm_init
 
 $(shell mkdir -p build/veclibm-obj)
 

@@ -55,6 +55,7 @@ static void print_flush(void);
 static void flush(void);
 
 void _halt(int code);
+void _putc(char ch);
 
 #define printf printf_
 int printf_(const char* format, ...);
@@ -143,49 +144,44 @@ int main(void) {
 #define EXIT_FAILURE 1
 #define EXIT_SUCCESS 0
 
-static void
-exit(int x)
+/* AM _trm_init is in prebuilt am-riscv64-xs.a and does not enable VS.
+ * Link with -Wl,--wrap=_trm_init so this runs first. */
+void __real__trm_init(void);
+void
+__wrap__trm_init(void)
 {
-	__asm volatile(
-		"mv a0, %0\n"
-		"li a7, 93\n"
-		"ecall\n"
-	:
-	: "r"(x)
-	: "a0", "a7");
+	unsigned long mstatus;
+	__asm__ volatile ("csrr %0, mstatus" : "=r"(mstatus));
+	mstatus |= (0x3UL << 9);  /* VS = Dirty */
+	mstatus |= (0x3UL << 13); /* FS = Dirty */
+	__asm__ volatile ("csrw mstatus, %0" :: "r"(mstatus));
+	__asm__ volatile ("csrwi vcsr, 0");
+	__real__trm_init();
 }
 
 static void
+exit(int x)
+{
+	_halt(x);
+}
+
+#if defined(__GNUC__)
+__attribute__((optimize("no-tree-vectorize")))
+#endif
+static void
 memwrite(void const *ptr, size_t len)
 {
-	__asm volatile(
-		"li a0, 1\n"
-		"mv a1, %0\n"
-		"mv a2, %1\n"
-		"li a7, 64\n"
-		"ecall\n"
-	:
-	: "r"(ptr), "r"(len)
-	: "a0", "a1", "a2", "a7"
-	);
+	unsigned char const *p = ptr;
+	while (len--)
+		_putc(*p++);
 }
 
 static size_t
 memread(void *ptr, size_t len)
 {
-	size_t ret;
-	__asm volatile(
-		"li a0, 0\n"
-		"mv a1, %1\n"
-		"mv a2, %2\n"
-		"li a7, 63\n"
-		"ecall\n"
-		"mv %0, a0\n"
-	: "=r"(ret)
-	: "r"(ptr), "r"(len)
-	: "a0", "a1", "a2", "a7"
-	);
-	return ret;
+	(void)ptr;
+	(void)len;
+	return 0;
 }
 
 int main(void);
@@ -226,6 +222,14 @@ memswap(void *a, void *b, size_t size)
 }
 
 #if !__STDC_HOSTED__
+/* -O2 + rv64gcv auto-vectorizes byte loops into vsetivli/vse*; keep scalar. */
+#if defined(__GNUC__)
+#define NOLIBC_NOVEC __attribute__((optimize("no-tree-vectorize")))
+#else
+#define NOLIBC_NOVEC
+#endif
+
+NOLIBC_NOVEC
 static void *
 memcpy(void *restrict dest, void const *restrict src, size_t n)
 {
@@ -235,6 +239,7 @@ memcpy(void *restrict dest, void const *restrict src, size_t n)
 	return dest;
 }
 
+NOLIBC_NOVEC
 static void *
 memset(void *dest, int c, size_t n)
 {
