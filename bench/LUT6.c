@@ -53,6 +53,6 @@ BENCH_BEG(base) {
 } BENCH_END
 
 Bench benches[] = {
-	BENCH( impls, MAX_MEM, "LUT6", bench_base )
+	BENCH( impls, MAX_DEST, "LUT6", bench_base )
 }; BENCH_MAIN(benches)
 

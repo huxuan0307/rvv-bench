@@ -64,7 +64,7 @@ void init(void);
 #if __STDC_HOSTED__ && !defined(CUSTOM_HOST)
 # include <stdlib.h>
 #else
-static unsigned char heap[1 + MAX_MEM + MEM_ALIGN];
+extern unsigned char _heap_start[];
 #endif
 
 
@@ -75,7 +75,7 @@ main(void)
 #if __STDC_HOSTED__ && !defined(CUSTOM_HOST)
 	void *ptr = mem = malloc(MAX_MEM + MEM_ALIGN);
 #else
-	mem = heap;
+	mem = _heap_start;
 #endif
 	mem = (unsigned char*)(((uintptr_t)mem + MEM_ALIGN-1) & ~(MEM_ALIGN-1));
 
@@ -88,77 +88,139 @@ main(void)
 
 	init();
 	bench_main();
+	print_flush();
 #if __STDC_HOSTED__ && !defined(CUSTOM_HOST)
 	free(ptr);
 #endif
 	return 0;
 }
 
-static fx
-bench_time(size_t n, Impl impl, Bench bench)
+static int
+bench_streq(char const *a, char const *b)
 {
-	static ux arr[MAX_REPEATS];
-	size_t total = 0, repeats = 0;
-	for (; repeats < MAX_REPEATS; ++repeats) {
-		total += arr[repeats] = bench.func(impl.func, n);
-		if (repeats > MIN_REPEATS && total > STOP_CYCLES)
-			break;
-	}
-#if MAX_REPEATS > 4
-	qsort(arr, repeats, sizeof *arr, compare_ux);
-	ux sum = 0, count = 0;
-	for (size_t i = repeats * 0.2f; i < repeats * 0.8f; ++i, ++count)
-		sum += arr[i];
+	while (*a && *a == *b) ++a, ++b;
+	return *a == *b;
+}
+
+static Impl *
+find_impl(Impl *impls, size_t n, char const *name)
+{
+	for (size_t i = 0; i < n; ++i)
+		if (bench_streq(impls[i].name, name)) return impls + i;
+	return 0;
+}
+
+static int
+impl_selected(Impl const *i)
+{
+#ifdef ONLY_IMPL
+	return bench_streq(i->name, STR(ONLY_IMPL));
 #else
-	ux sum = 0, count = repeats;
-	for (size_t i = 0; i < repeats; ++i)
-		sum += arr[i];
+	(void)i;
+	return 1;
 #endif
-	return n / ((fx)sum / count);
+}
+
+static size_t
+bench_time(size_t n, Impl impl, Bench bench, ux *arr)
+{
+	ux total = 0;
+	size_t nrep = 0;
+	for (; nrep < MAX_REPEATS; ++nrep) {
+		total += arr[nrep] = bench.func(impl.func, n);
+		if (nrep + 1 >= MIN_REPEATS && total > STOP_CYCLES) {
+			++nrep;
+			break;
+		}
+	}
+	return nrep;
+}
+
+static int
+bench_check_one(Impl *sel, Impl *ref, Bench *b, size_t n)
+{
+	if (!sel || !ref)
+		return 1;
+	if (sel == ref || sel->skipCheck) {
+		(void)b->func(sel->func, n);
+		return 1;
+	}
+	URand seed = randState;
+	(void)b->func(sel->func, n);
+	ux si = checksum(n);
+	randState = seed;
+	(void)b->func(ref->func, n);
+	ux s0 = checksum(n);
+	if (si != s0) {
+		print("ERROR: ")(s,sel->name)(" in ")(s,b->name)(" at ")(u,n)(flush,);
+		return 0;
+	}
+	return 1;
 }
 
 static void
 bench_run(Bench *benches, size_t nBenches)
 {
 	for (Bench *b = benches; b != benches + nBenches; ++b) {
+#ifdef ONLY_IMPL
+		if (!find_impl(b->impls, b->nImpls, STR(ONLY_IMPL))) {
+			print("ERROR: missing impl ")(s,STR(ONLY_IMPL))(flush,);
+			return;
+		}
+#endif
+
+#if CHECK
+		Impl *ref = find_impl(b->impls, b->nImpls, STR(REF_IMPL));
+		if (!ref) {
+			print("ERROR: missing ref ")(s,STR(REF_IMPL))(flush,);
+			return;
+		}
+		print("check: \"")(s,b->name)("\"\n")(flush,);
+		for (size_t n = 1; n < b->N; n = BENCH_NEXT(n)) {
+			for (Impl *i = b->impls; i != b->impls + b->nImpls; ++i) {
+				if (!impl_selected(i)) continue;
+				if (!bench_check_one(i, ref, b, n)) return;
+			}
+		}
+		print("OK: \"")(s,b->name)("\"\n")(flush,);
+#else
 		print("{\ntitle: \"")(s,b->name)("\",\n");
 		print("labels: [\"0\",");
-		for (size_t i = 0; i < b->nImpls; ++i)
-			print("\"")(s,b->impls[i].name)("\",");
+		for (Impl *i = b->impls; i != b->impls + b->nImpls; ++i)
+			if (impl_selected(i)) print("\"")(s,i->name)("\",");
 		print("],\n");
 
-		size_t N = b->N;
 		print("data: [\n[");
-		for (size_t n = 1; n < N; n = BENCH_NEXT(n))
+		for (size_t n = 1; n < b->N; n = BENCH_NEXT(n))
 			print(u,n)(",");
 		print("],\n")(flush,);
 
+		print("repeats: [\n");
 		for (Impl *i = b->impls; i != b->impls + b->nImpls; ++i) {
-			print("[");
-			for (size_t n = 1; n < N; n = BENCH_NEXT(n)) {
-#if VALIDATE
-				ux si = 0, s0 = 0;
-				if (i != b->impls && !i->skipCheck) {
-					URand seed = randState;
-					(void)b->func(i->func, n);
-					si = checksum(n);
-
-					randState = seed;
-					(void)b->func(b->impls[0].func, n);
-					s0 = checksum(n);
+			if (!impl_selected(i)) continue;
+			static ux arr[MAX_REPEATS];
+			static fx means[512];
+			size_t nMeans = 0;
+			print("[\n");
+			for (size_t n = 1; n < b->N; n = BENCH_NEXT(n)) {
+				size_t nrep = bench_time(n, *i, *b, arr);
+				ux sum = 0;
+				print("[");
+				for (size_t r = 0; r < nrep; ++r) {
+					print(u,arr[r])(",");
+					sum += arr[r];
 				}
-
-				if (si != s0) {
-					print("ERROR: ")(s,i->name)(" in ")(s,b->name)(" at ")(u,n)(flush,);
-					return;
-				}
-#endif
-
-				print(f,bench_time(n, *i, *b))(",")(flush,);
+				print("],\n")(flush,);
+				means[nMeans++] = n / ((fx)sum / nrep);
 			}
+			print("],\n");
+			print("[");
+			for (size_t k = 0; k < nMeans; ++k)
+				print(f,means[k])(",");
 			print("],\n")(flush,);
 		}
 		print("]\n},\n");
+#endif
 	}
 }
 

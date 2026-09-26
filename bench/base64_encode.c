@@ -65,12 +65,12 @@ ux checksum(size_t n) {
 
 BENCH_BEG(base) {
 	src = mem;
-	dest = mem + MAX_MEM/3;
+	dest = mem + MAX_DEST;
 	memset(dest, 0, n*2+9);
 	TIME last = f(dest, src, n, base64LUTs);
 } BENCH_END
 
 Bench benches[] = {
-	BENCH( impls, MAX_MEM/3, "base64 encode", bench_base ),
+	BENCH( impls, MAX_DEST/2, "base64 encode", bench_base ),
 }; BENCH_MAIN(benches)
 

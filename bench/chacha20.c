@@ -48,7 +48,7 @@ BENCH_BEG(aligned) {
 } BENCH_END
 
 Bench benches[] = {
-	BENCH( impls, MAX_MEM/2 - 16, "chacha20 aligned", bench_aligned )
+	BENCH( impls, MAX_DEST - 16, "chacha20 aligned", bench_aligned )
 }; BENCH_MAIN(benches)
 
 

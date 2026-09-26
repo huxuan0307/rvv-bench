@@ -89,7 +89,7 @@ BENCH_BEG(base) {
 Bench benches[] = {
 	BENCH(
 		impls,
-		SCALE_mandelbrot(MAX_MEM / 4),
+		SCALE_mandelbrot(MAX_DEST),
 		"mandelbrot "STR(mandelbrot_ITER),
 		bench_base
 	)

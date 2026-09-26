@@ -129,8 +129,8 @@ BENCH_BEG(aligned) {
 } BENCH_END
 
 Bench benches[] = {
-	BENCH( impls, MAX_MEM - 521, "utf8 count", bench_base ),
-	BENCH( impls, MAX_MEM - 521, "utf8 count aligned", bench_aligned )
+	BENCH( impls, MAX_DEST - 521, "utf8 count", bench_base ),
+	BENCH( impls, MAX_DEST - 521, "utf8 count aligned", bench_aligned )
 }; BENCH_MAIN(benches)
 
 

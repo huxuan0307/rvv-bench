@@ -67,7 +67,7 @@ BENCH_BEG(2_256) {
 	TIME last = (uintptr_t)f(str, n);
 } BENCH_END
 
-#define COUNT SCALE_mergelines(MAX_MEM) - 256
+#define COUNT (MAX_DEST - 256)
 Bench benches[] = {
 	BENCH( impls, COUNT, "mergelines 2/3", bench_2_3 ),
 	BENCH( impls, COUNT, "mergelines 2/16", bench_2_16 ),

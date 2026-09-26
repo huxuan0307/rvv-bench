@@ -54,6 +54,6 @@ BENCH_BEG(base) {
 } BENCH_END
 
 Bench benches[] = {
-	BENCH( impls, MAX_MEM/2 - 521, "memreverse", bench_base ),
+	BENCH( impls, MAX_DEST - 521, "memreverse", bench_base ),
 }; BENCH_MAIN(benches)
 

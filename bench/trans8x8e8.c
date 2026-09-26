@@ -18,5 +18,5 @@
 #include "trans8x8.c.inc"
 
 Bench benches[] = {
-	BENCH( impls, MAX_MEM/4-9-3, "trans8x8e8", bench_base ),
+	BENCH( impls, MAX_DEST-9-3, "trans8x8e8", bench_base ),
 }; BENCH_MAIN(benches)

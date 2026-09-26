@@ -63,7 +63,7 @@ Impl impls[] = { IMPLS(EXTRACT) };
 T *dest, *src1, *src2;
 
 void init(void) {
-	size_t n = MAX_MEM/sizeof(T)/4;
+	size_t n = MAX_DEST/sizeof(T);
 	dest = (T*)mem;
 	src1 = dest + n;
 	src2 = src1 + n;

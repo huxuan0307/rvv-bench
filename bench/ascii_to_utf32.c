@@ -40,7 +40,7 @@ ux checksum(size_t n) {
 
 void common(size_t n, size_t dOff, size_t sOff) {
 	dest = (uint32_t*)mem + dOff/4;
-	src = (uint8_t*)(dest + 9 + MAX_MEM/5) + sOff;
+	src = (uint8_t*)(dest + n + 9) + sOff;
 	bench_memrand(src, n+9);
 	for (size_t i = 0; i < n+9; ++i) src[i] |= 0x7F;
 	memset(dest, 1, (n+9)*4);
@@ -57,7 +57,7 @@ BENCH_BEG(aligned) {
 } BENCH_END
 
 Bench benches[] = {
-	BENCH( impls, MAX_MEM/5 - 512-9*2, "ascii to utf32", bench_base ),
-	BENCH( impls, MAX_MEM/5 - 512-9*2, "ascii to utf32 aligned", bench_aligned ),
+	BENCH( impls, MAX_DEST/4 - 512-9*2, "ascii to utf32", bench_base ),
+	BENCH( impls, MAX_DEST/4 - 512-9*2, "ascii to utf32 aligned", bench_aligned ),
 }; BENCH_MAIN(benches)
 

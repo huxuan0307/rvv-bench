@@ -158,7 +158,7 @@ BENCH_BEG(aligned) {
 } BENCH_END
 
 Bench benches[] = {
-	BENCH( impls, MAX_MEM - 521, "memset", bench_base ),
-	BENCH( impls, MAX_MEM - 521, "memset aligned", bench_aligned )
+	BENCH( impls, MAX_DEST - 521, "memset", bench_base ),
+	BENCH( impls, MAX_DEST - 521, "memset aligned", bench_aligned )
 }; BENCH_MAIN(benches)
 

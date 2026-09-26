@@ -94,6 +94,6 @@ BENCH_BEG(base) {
 } BENCH_END
 
 Bench benches[] = {
-	BENCH( impls, MAX_MEM/4, "byteswap32", bench_base )
+	BENCH( impls, MAX_DEST/4, "byteswap32", bench_base )
 }; BENCH_MAIN(benches)
 

@@ -49,7 +49,7 @@ BENCH_BEG(aligned) {
 } BENCH_END
 
 Bench benches[] = {
-	BENCH( impls, MAX_MEM, "poly1305 aligned", bench_aligned )
+	BENCH( impls, MAX_DEST, "poly1305 aligned", bench_aligned )
 }; BENCH_MAIN(benches)
 
 
