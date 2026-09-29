@@ -42,6 +42,12 @@ define(`m_mask',
 ifdef(`ENABLE_MASK',
 	`m_$1( $2`'m, shift2($*), v0.t)')')
 
+/* Keep m_unimpl placeholders to preserve the LMUL-indexed pointer tables. */
+define(`m_emit_case',
+`ifelse(`$1',`m_unimpl',`$2',`ifdef(`BENCH_CASE',
+`ifelse(BENCH_CASE,`$1',`$2')',
+`$2')')')
+
 define(`m_bench_vx',
 	`m_mask($1, bench_$3`'vv, $2, m_nop, $3.vv, v8, v16, v24)
 	m_mask( $1, bench_$3`'vx, $2, m_nop, $3.vx, v8, v16, t0)')
@@ -59,9 +65,9 @@ define(`m_bench_xi',
 	m_mask( $1, bench_$3`'vi, $2, m_nop, $3.vi, v8, v16, 13)')
 
 define(`m_bench_vxi',
-	`m_mask($1, bench_$3`'vv, $2, m_nop, $3.vv, v8, v16, v24)
-	m_mask( $1, bench_$3`'vx, $2, m_nop, $3.vx, v8, v16, t0)
-	m_mask( $1, bench_$3`'vi, $2, m_nop, $3.vi, v8, v16, 13)')
+	`m_emit_case($3.vv, `m_mask($1, bench_$3`'vv, $2, m_nop, $3.vv, v8, v16, v24)')
+	m_emit_case($3.vx, `m_mask( $1, bench_$3`'vx, $2, m_nop, $3.vx, v8, v16, t0)')
+	m_emit_case($3.vi, `m_mask( $1, bench_$3`'vi, $2, m_nop, $3.vi, v8, v16, 13)')')
 
 define(`m_bench_vxm',
 	`m_$1(bench_$3`'vvm, $2, m_nop, $3.vvm, v8, v16, v24, v0)
@@ -523,10 +529,10 @@ define(`m_bench_all',`
 #define defptr .dword
 #endif
 
-define(`m_gen_function_pointers', `defptr $1_m`'m_benchLMUL')
-define(`m_gen_types', `defptr $2')
+define(`m_gen_function_pointers', `m_emit_case($4, `defptr $1_m`'m_benchLMUL')')
+define(`m_gen_types', `m_emit_case($4, `defptr $2')')
 define(`m_format',`$2 shift2($*)')
-define(`m_gen_strings', `.string "m_format(,shift3($*))"')
+define(`m_gen_strings', `m_emit_case($4, `.string "m_format(,shift3($*))"')')
 
 .balign 8
 .global aligned
@@ -672,7 +678,7 @@ m_format(,$*)')
 
 
 /* name type setup code:vararg */
-define(`m_gen_bench',`
+define(`m_gen_bench_body',`
 $1`'_m`'m_LMUL:	pushdef(`m_code', `shift3($*)')
 	$3
 	li a0, WARMUP
@@ -728,6 +734,8 @@ ifelse(m_LMUL,8,`m_gen_code_m8(m_code)')
 	sub a0, a0, a3
 ret	popdef(`m_code')
 ')
+
+define(`m_gen_bench', `m_emit_case($4, `m_gen_bench_body($*)')')
 
 define(`m_LMUL', 1)
 m_bench_all(`gen_bench')

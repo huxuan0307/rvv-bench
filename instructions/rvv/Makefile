@@ -3,6 +3,10 @@
 include ../../config.mk
 
 INSNS = $(shell cat insns.list)
+# Derive forms from the same m4/CPP output that is compiled, so ISA guards
+# follow the active -march instead of producing empty executables.
+INSN_FORMS = $(shell m4 ${M4_DEFS} gen.S | ${CC} ${CFLAGS} -E -x assembler-with-cpp - | \
+	awk '/^[[:space:]]*\.string "/ { sub(/^.*\.string "/, "", $$0); sub(/ .*/, "", $$0); print }' | sort -u)
 
 # QUICK=1: fewer guest insns for NEMU/smoke (default keeps WARMUP/LOOP/RUNS)
 ifdef QUICK
@@ -26,7 +30,8 @@ rvv: gen.S main.c config.h ../../config.mk
 
 build/rvv-%.elf: gen.S main.c config.h ../../config.mk
 	mkdir -p build
-	m4 ${M4_DEFS} -DBENCH_INSN=$* gen.S > build/$*.S
+	m4 ${M4_DEFS} -DBENCH_INSN=$(if $(filter vcpop.m,$*),vcpopm,$(if $(filter vcpop.v,$*),vcpopv,$(firstword $(subst ., ,$*)))) $(if $(findstring .,$*),-DBENCH_CASE=$*) gen.S > build/$*.S
+	$(if $(findstring .,$*),@grep -Fq '.string "$* ' build/$*.S || { echo 'No benchmark for $*' >&2; exit 1; })
 	${CC} ${CFLAGS} ${BENCH_DEFS} -fno-tree-vectorize -Wl,--relax build/$*.S main.c -o $@ \
 		-T ../../thirdparty/link.ld \
 		../../thirdparty/am-riscv64-xs.a \
@@ -34,6 +39,8 @@ build/rvv-%.elf: gen.S main.c config.h ../../config.mk
 	${OBJCOPY} -S --set-section-flags .bss=alloc,contents -O binary $@ $(@:.elf=.bin)
 
 insn: $(INSNS:%=build/rvv-%.elf)
+
+insn-forms: $(INSN_FORMS:%=build/rvv-%.elf)
 
 run-%: build/rvv-%.elf
 	../../run.sh ./build/rvv-$*.elf
