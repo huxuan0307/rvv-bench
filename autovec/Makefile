@@ -1,0 +1,15 @@
+PYTHON ?= python3
+GCC ?= /nfs/share/riscv-toolchain-gcc16.1.0-260715-nightly/bin/riscv64-unknown-linux-gnu-gcc
+SOURCES ?= ../../compiler-experiment/benchmarks
+OPT ?= O3
+JOBS ?= 8
+NEMU ?= /nfs/home/huxuan/opt/bin/riscv64-nemu-interpreter
+.PHONY: all run report
+all:
+	$(PYTHON) build.py --sources $(SOURCES) --gcc $(GCC) --opt $(OPT) --jobs $(JOBS)
+run:
+	$(PYTHON) run.py --build build/$(OPT) --nemu $(NEMU) --jobs $(JOBS)
+compare:
+	$(PYTHON) compare.py --vector build/$(OPT) --scalar build/$(OPT)-scalar
+report: compare
+	$(PYTHON) report.py --build build/$(OPT) --output reports/gcc-default-$(OPT).md

@@ -8,6 +8,10 @@ Benchmark results can be found at: https://camel-cdr.github.io/rvv-bench-results
 
 Contains a bunch of benchmark of different implementations of certain algorithms.
 
+## GCC automatic vectorization ([./autovec/](./autovec/))
+
+Bare-metal adaptations of TSVC_2, all 30 PolyBench/C kernels, and LLVM Vectorizer scalar-loop tests. Build with `make -C autovec all`, validate with `make -C autovec run`, and generate the GCC vectorization report with `make -C autovec report`. See [autovec/README.md](autovec/README.md) for source versions, default compiler strategy, and validation details.
+
 ## Instruction cycle count ([./instructions/](./instructions/))
 
 Measures the cycle count of RVV instructions by unrolling and looping over the given instruction repeatedly.
