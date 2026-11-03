@@ -6,6 +6,18 @@ NEMU ?= riscv64-nemu-interpreter
 BUILD = build
 CHECK_DIR = $(BUILD)/check
 RUN_DIR = $(BUILD)/run
+MAX_DEST ?= 262144
+MEMCPY_INIT ?= 1
+NEXT_ALGO ?= ORIGIN
+DEST_TAG = d$(MAX_DEST)-mi$(MEMCPY_INIT)-na$(NEXT_ALGO)
+
+ifeq ($(NEXT_ALGO),ORIGIN)
+NEXT_ALGO_DEFINE = -DNEXT_ALGO_ORIGIN
+else ifeq ($(NEXT_ALGO),FIBONACCI)
+NEXT_ALGO_DEFINE = -DNEXT_ALGO_FIBONACCI
+else
+$(error NEXT_ALGO must be ORIGIN or FIBONACCI, got '$(NEXT_ALGO)')
+endif
 
 LINK = -T ../thirdparty/link.ld \
 	../thirdparty/am-riscv64-xs.a \
@@ -70,7 +82,13 @@ mandelbrot_IMPLS = scalar_f32 scalar_f64 \
 	rvv_f64_m1 rvv_f64_m2
 
 chacha20_REF = boring
-chacha20_IMPLS = boring rvv
+chacha20_IMPLS = boring rvv riscv riscv_xor riscv_m4
+chacha20_DEPS = chacha20-riscv-opt.h chacha20-riscv-m4.S ../nolibc.h \
+	../thirdparty/rvv-chacha-poly/boring.h \
+	../thirdparty/rvv-chacha-poly/boring.c \
+	../thirdparty/rvv-chacha-poly/vchacha.s \
+	../thirdparty/chacha20-riscv/src/chacha20.h \
+	../thirdparty/chacha20-riscv/src/chacha20.s
 
 poly1305_REF = boring
 poly1305_IMPLS = boring rvv
@@ -129,38 +147,66 @@ trans8x8e16_IMPLS = seq_scalar seq_scalar_autovec \
 	seq_rvv_vls_single seq_rvv_vss_single \
 	zip_rvv_vzip_fake seq_rvv_vzip_fake_single
 
-CHECK_ELFS = $(foreach b,$(BENCHES),$(foreach i,$($(b)_IMPLS),$(CHECK_DIR)/$(b)-$(i).elf))
-RUN_ELFS   = $(foreach b,$(BENCHES),$(foreach i,$($(b)_IMPLS),$(RUN_DIR)/$(b)-$(i).elf))
+CHECK_ELFS = $(foreach b,$(BENCHES),$(foreach i,$($(b)_IMPLS),$(CHECK_DIR)/$(b)-$(i)-$(DEST_TAG).elf))
+RUN_ELFS   = $(foreach b,$(BENCHES),$(foreach i,$($(b)_IMPLS),$(RUN_DIR)/$(b)-$(i)-$(DEST_TAG).elf))
 CHECK_BINS = $(CHECK_ELFS:.elf=.bin)
 RUN_BINS   = $(RUN_ELFS:.elf=.bin)
+CHECK_DASMS = $(CHECK_ELFS:.elf=.dasm)
+RUN_DASMS   = $(RUN_ELFS:.elf=.dasm)
 
-.PHONY: all check run bins clean list run-nemu-check run-nemu
+.PHONY: all check run bins dasm clean list run-nemu-check run-nemu test-chacha20 profile-chacha20
 
 all: check run
 
-check: $(CHECK_ELFS) $(CHECK_BINS)
-run: $(RUN_ELFS) $(RUN_BINS)
+check: $(CHECK_ELFS) $(CHECK_BINS) $(CHECK_DASMS)
+run: $(RUN_ELFS) $(RUN_BINS) $(RUN_DASMS)
 bins: $(CHECK_BINS) $(RUN_BINS)
+dasm: $(CHECK_DASMS) $(RUN_DASMS)
 
 list:
-	@echo "check: $(words $(CHECK_ELFS))  run: $(words $(RUN_ELFS))"
+	@echo "MAX_DEST=$(MAX_DEST)  MEMCPY_INIT=$(MEMCPY_INIT)  NEXT_ALGO=$(NEXT_ALGO)  check: $(words $(CHECK_ELFS))  run: $(words $(RUN_ELFS))"
 	@printf '%s\n' $(CHECK_ELFS) $(RUN_ELFS)
 
 $(CHECK_DIR) $(RUN_DIR):
 	mkdir -p $@
 
 define BENCH_RULES
-$(CHECK_DIR)/$(1)-%.elf: $(1).c $(1).S config.h bench.h template.S ../config.mk | $(CHECK_DIR)
+$(CHECK_DIR)/$(1)-%-$(DEST_TAG).elf: $(1).c $(1).S config.h bench.h template.S ../config.mk $($(1)_DEPS) | $(CHECK_DIR)
 	@echo "  CC  $$@"
-	@$${CC} $${CFLAGS} -DCHECK=1 -DONLY_IMPL=$$* -DREF_IMPL=$($(1)_REF) \
+	@$${CC} $${CFLAGS} -DCHECK=1 -DONLY_IMPL=$$* -DREF_IMPL=$($(1)_REF) -DMAX_DEST=$(MAX_DEST) -DMEMCPY_INIT=$(MEMCPY_INIT) $(NEXT_ALGO_DEFINE) \
 		-o $$@ $$< -DINC=$(1).S template.S $${LINK}
 
-$(RUN_DIR)/$(1)-%.elf: $(1).c $(1).S config.h bench.h template.S ../config.mk | $(RUN_DIR)
+$(RUN_DIR)/$(1)-%-$(DEST_TAG).elf: $(1).c $(1).S config.h bench.h template.S ../config.mk $($(1)_DEPS) | $(RUN_DIR)
 	@echo "  CC  $$@"
-	@$${CC} $${CFLAGS} -DCHECK=0 -DONLY_IMPL=$$* \
+	@$${CC} $${CFLAGS} -DCHECK=0 -DONLY_IMPL=$$* -DMAX_DEST=$(MAX_DEST) -DMEMCPY_INIT=$(MEMCPY_INIT) $(NEXT_ALGO_DEFINE) \
 		-o $$@ $$< -DINC=$(1).S template.S $${LINK}
 endef
 $(foreach b,$(BENCHES),$(eval $(call BENCH_RULES,$(b))))
+
+$(CHECK_DIR)/chacha20-api-$(DEST_TAG).elf: chacha20-test.c chacha20.c chacha20.S config.h bench.h template.S ../config.mk $(chacha20_DEPS) | $(CHECK_DIR)
+	@echo "  CC  $@"
+	@${CC} ${CFLAGS} -DCHECK=1 -DMAX_DEST=$(MAX_DEST) -DMEMCPY_INIT=$(MEMCPY_INIT) $(NEXT_ALGO_DEFINE) \
+		-o $@ $< -DINC=chacha20.S template.S ${LINK}
+
+test-chacha20: $(CHECK_DIR)/chacha20-api-$(DEST_TAG).bin
+	@$(NEMU) -b $< >$(CHECK_DIR)/chacha20-api-$(DEST_TAG).log 2>&1 || { cat $(CHECK_DIR)/chacha20-api-$(DEST_TAG).log; exit 1; }
+	@cat $(CHECK_DIR)/chacha20-api-$(DEST_TAG).log
+	@grep -q 'OK: chacha20 direct riscv==rvv==riscv_m4' $(CHECK_DIR)/chacha20-api-$(DEST_TAG).log
+	@grep -q 'OK: chacha20 stream API' $(CHECK_DIR)/chacha20-api-$(DEST_TAG).log
+	@grep -q 'HIT GOOD TRAP' $(CHECK_DIR)/chacha20-api-$(DEST_TAG).log
+	@! grep -Eq 'ERROR:|HIT BAD TRAP|HIT CRITICAL ERROR' $(CHECK_DIR)/chacha20-api-$(DEST_TAG).log
+
+$(CHECK_DIR)/chacha20-profile-$(DEST_TAG).elf: chacha20-profile.c chacha20.c chacha20.S config.h bench.h template.S ../config.mk $(chacha20_DEPS) | $(CHECK_DIR)
+	@echo "  CC  $@"
+	@${CC} ${CFLAGS} -DCHECK=0 -DMAX_DEST=$(MAX_DEST) -DMEMCPY_INIT=$(MEMCPY_INIT) $(NEXT_ALGO_DEFINE) \
+		-o $@ $< -DINC=chacha20.S template.S ${LINK}
+
+profile-chacha20: $(CHECK_DIR)/chacha20-profile-$(DEST_TAG).bin $(CHECK_DIR)/chacha20-profile-$(DEST_TAG).dasm
+	@$(NEMU) -b $< >$(CHECK_DIR)/chacha20-profile-$(DEST_TAG).log 2>&1 || { cat $(CHECK_DIR)/chacha20-profile-$(DEST_TAG).log; exit 1; }
+	@cat $(CHECK_DIR)/chacha20-profile-$(DEST_TAG).log
+	@grep -q 'OK: chacha20 instruction profile' $(CHECK_DIR)/chacha20-profile-$(DEST_TAG).log
+	@grep -q 'HIT GOOD TRAP' $(CHECK_DIR)/chacha20-profile-$(DEST_TAG).log
+	@! grep -Eq 'ERROR:|HIT BAD TRAP|HIT CRITICAL ERROR' $(CHECK_DIR)/chacha20-profile-$(DEST_TAG).log
 
 $(CHECK_DIR)/%.bin: $(CHECK_DIR)/%.elf
 	@echo "  BIN $@"
@@ -169,6 +215,14 @@ $(CHECK_DIR)/%.bin: $(CHECK_DIR)/%.elf
 $(RUN_DIR)/%.bin: $(RUN_DIR)/%.elf
 	@echo "  BIN $@"
 	@${OBJCOPY} -S --set-section-flags .bss=alloc,contents -O binary $< $@
+
+$(CHECK_DIR)/%.dasm: $(CHECK_DIR)/%.elf
+	@echo "  DUMP $@"
+	@${DUMP} -S -d $< > $@
+
+$(RUN_DIR)/%.dasm: $(RUN_DIR)/%.elf
+	@echo "  DUMP $@"
+	@${DUMP} -S -d $< > $@
 
 NEMU_LOG ?= ../logs/run/nemu-bench
 NEMU_JOBS ?= 32
@@ -197,7 +251,3 @@ run-nemu: run
 clean:
 	rm -rf $(BUILD)
 	rm -f $(BENCHES)
-
-
-
-

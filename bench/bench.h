@@ -2,7 +2,7 @@
 #include "../nolibc.h"
 
 #ifndef BENCH_NEXT
-#  define BENCH_NEXT NEXT
+#  define BENCH_NEXT(previous, current) NEXT(previous, current)
 #endif
 
 #define MX(f,F) f(F##_m1) f(F##_m2) f(F##_m4) f(F##_m8)
@@ -122,6 +122,14 @@ impl_selected(Impl const *i)
 }
 
 static size_t
+bench_next_size(size_t *previous, size_t current)
+{
+	size_t next = BENCH_NEXT(*previous, current);
+	*previous = current;
+	return next;
+}
+
+static size_t
 bench_time(size_t n, Impl impl, Bench bench, ux *arr)
 {
 	ux total = 0;
@@ -176,7 +184,8 @@ bench_run(Bench *benches, size_t nBenches)
 			return;
 		}
 		print("check: \"")(s,b->name)("\"\n")(flush,);
-		for (size_t n = 1; n < b->N; n = BENCH_NEXT(n)) {
+		for (size_t previous = 1, n = 1; n < b->N;
+		     n = bench_next_size(&previous, n)) {
 			for (Impl *i = b->impls; i != b->impls + b->nImpls; ++i) {
 				if (!impl_selected(i)) continue;
 				if (!bench_check_one(i, ref, b, n)) return;
@@ -191,7 +200,8 @@ bench_run(Bench *benches, size_t nBenches)
 		print("],\n");
 
 		print("data: [\n[");
-		for (size_t n = 1; n < b->N; n = BENCH_NEXT(n))
+		for (size_t previous = 1, n = 1; n < b->N;
+		     n = bench_next_size(&previous, n))
 			print(u,n)(",");
 		print("],\n")(flush,);
 
@@ -199,25 +209,16 @@ bench_run(Bench *benches, size_t nBenches)
 		for (Impl *i = b->impls; i != b->impls + b->nImpls; ++i) {
 			if (!impl_selected(i)) continue;
 			static ux arr[MAX_REPEATS];
-			static fx means[512];
-			size_t nMeans = 0;
 			print("[\n");
-			for (size_t n = 1; n < b->N; n = BENCH_NEXT(n)) {
+			for (size_t previous = 1, n = 1; n < b->N;
+			     n = bench_next_size(&previous, n)) {
 				size_t nrep = bench_time(n, *i, *b, arr);
-				ux sum = 0;
 				print("[");
-				for (size_t r = 0; r < nrep; ++r) {
+				for (size_t r = 0; r < nrep; ++r)
 					print(u,arr[r])(",");
-					sum += arr[r];
-				}
 				print("],\n")(flush,);
-				means[nMeans++] = n / ((fx)sum / nrep);
 			}
 			print("],\n");
-			print("[");
-			for (size_t k = 0; k < nMeans; ++k)
-				print(f,means[k])(",");
-			print("],\n")(flush,);
 		}
 		print("]\n},\n");
 #endif
@@ -239,4 +240,3 @@ bench_run(Bench *benches, size_t nBenches)
 	void bench_main(void) { \
 		bench_run(benches, ARR_LEN(benches)); \
 	}
-

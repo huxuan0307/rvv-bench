@@ -107,6 +107,17 @@ define(`m_loadff',
 	m_emit(vl$3`'64ff, mask, $1, bench_vl$3`'64ffv, $2`'64, m_mem64, vl$3`'64ff.v, shift3($*))
 #endif')
 
+/* helper, register count: do not use m_mask or LMUL-dependent EEW masks. */
+define(`m_whole_loadstore',`
+	m_emit(vl$2re8, $1, bench_vl$2re8v, T_A, m_mem8, vl$2re8.v, v8, (t0))
+	m_emit(vl$2re16, $1, bench_vl$2re16v, T_A, m_mem16, vl$2re16.v, v8, (t0))
+	m_emit(vl$2re32, $1, bench_vl$2re32v, T_A, m_mem32, vl$2re32.v, v8, (t0))
+#if __riscv_v_elen >= 64
+	m_emit(vl$2re64, $1, bench_vl$2re64v, T_A, m_mem64, vl$2re64.v, v8, (t0))
+#endif
+	m_emit(vs$2r, $1, bench_vs$2rv, T_A, m_mem8, vs$2r.v, v8, (t0))
+')
+
 define(`m_stride',
 	`m_mask($1, $2`'t3, shift2($*), t3)
 	m_mask( $1, $2`'x0, shift2($*), x0)
@@ -155,25 +166,23 @@ define(`m_loadstore',
 /* we want to roughly access the memory range of vlenb*8*4 */
 .macro m_mem shift
 	csrr t8, vlenb
-	la t1, aligned
-	lx t1, (t1) /* index base */
+	la t1, memory_base
+	lx t1, (t1) /* selected 16B-aligned or +15B base */
 
 	slli t7, t8, 4
 	addi t7, t7, -1
 	and t0, t0, t7
+	andi t0, t0, -16 /* preserve selected base alignment */
 	add t0, t0, t1 /* unit-stride base */
 
 	slli t7, t8, 3
 	addi t7, t7, -1
 	and t2, t2, t7
-	add t2, t2, t1   /* strided base */
+	andi t2, t2, -16
+	add t2, t2, t1   /* strided base (not every strided element is 16B aligned) */
 	li t3, 3<<\shift /* strided stride */
 
-	srli t0, t0, \shift
-	slli t0, t0, \shift
-
-	srli t2, t2, \shift
-	slli t2, t2, \shift
+	/* Do not round to EEW: preserve address % 16 == 15 in unaligned16. */
 
 	li t1, -1<<\shift /* negative stride 1 */
 .endm
@@ -210,9 +219,11 @@ define(`m_emit',
 
 /* calls $1 with: name type setup code:vararg */
 define(`m_bench_all',`
-	m_emit(add, $1, bench_add, T_A, m_nop, add, t0, t1, t2)
+	/* Keep scalar sources outside the rotated t0..t7 destination set.
+	 * Otherwise rotating t0 onto t1/t2 creates unintended RAW chains. */
+	m_emit(add, $1, bench_add, T_A, m_nop, add, t0, a5, a6)
 
-	m_emit(mul, $1, bench_mul, T_A, m_nop, mul, t0, t1, t2)
+	m_emit(mul, $1, bench_mul, T_A, m_nop, mul, t0, a5, a6)
 	m_emit(vadd, bench_vxi, $1, T_A, vadd)
 	m_emit(vsub, bench_vx,  $1, T_A, vsub)
 	m_emit(vrsub, bench_xi, $1, T_A, vrsub)
@@ -443,6 +454,13 @@ define(`m_bench_all',`
 	m_loadstore(mask, $1, T_E, e, v8, (t0))
 	m_loadff(   $1, T_E, e, v8, (t0))
 
+	/* Whole-register transfers are unmasked and independent of vl/vtype.
+	 * Use the selected address alignment; the largest transfer is 8*vlenb. */
+	m_whole_loadstore($1, 1)
+	m_whole_loadstore($1, 2)
+	m_whole_loadstore($1, 4)
+	m_whole_loadstore($1, 8)
+
 	m_emit(vlm, $1, bench_vlm, T_E8, m_mem8, vlm.v, v8, (t0))
 	m_emit(vsm, $1, bench_vsm, T_E8, m_mem8, vsm.v, v8, (t0))
 
@@ -531,6 +549,8 @@ define(`m_bench_all',`
 
 define(`m_gen_function_pointers', `m_emit_case($4, `defptr $1_m`'m_benchLMUL')')
 define(`m_gen_types', `m_emit_case($4, `defptr $2')')
+/* Setup macros, not mnemonic prefixes, identify all emitted memory forms. */
+define(`m_gen_memory', `m_emit_case($4, `defptr ifelse(regexp(`$3', `^m_mem'), 0, 1, 0)')')
 define(`m_format',`$2 shift2($*)')
 define(`m_gen_strings', `m_emit_case($4, `.string "m_format(,shift3($*))"')')
 
@@ -540,6 +560,9 @@ aligned:
 defptr 0
 .global misaligned
 misaligned:
+defptr 0
+.global memory_base
+memory_base:
 defptr 0
 
 
@@ -608,6 +631,12 @@ pushdef(`m_ifmx',`m_ifmx_t($*)')
 	defptr 0
 
 .balign 8
+.global bench_is_memory
+bench_is_memory:
+	m_bench_all(`gen_memory')
+	defptr 0
+
+.balign 8
 .global bench_names
 	bench_names:
 	m_bench_all(`gen_strings')
@@ -636,6 +665,12 @@ define(`m_offset',
 	`ifelse(`$3',,`m_format($1)',
 		`m_offset(`$1,m_offset1($3,$2)',$2,$4,$5,$6,$7,$8,$9)')')
 
+/* These legacy rotations provide only 8/4/2/1 destination groups for
+ * ordinary m1/m2/m4/m8 operations. Implicit-vd readers (FMA/MAC) retain
+ * loop-carried RAW chains: their CPI is not a validated peak throughput.
+ * Use a chain-count saturation sweep (e.g. P1_SUITE=fmavv) before drawing
+ * execution-resource conclusions. randomize below also uses NaN FP data.
+ * Keep eight targets per block: main.c normalizes by that exact count. */
 define(`m_gen_code_m1',
 	`m_format(,$*)
 m_offset(,1,$*)
@@ -677,16 +712,21 @@ m_format(,$*)
 m_format(,$*)')
 
 
+/* Whole-register instructions encode their group size, regardless of LMUL.
+ * Use that size for register rotation (e.g. vl8re8.v must not use v9). */
+define(`m_gen_code',`
+	pushdef(`m_group', regexp(`$1', `^v[ls]\([1248]\)r', `\1'))
+	ifelse(m_group, `', `indir(`m_gen_code_m'm_LMUL, $*)',
+		`indir(`m_gen_code_m'm_group, $*)')
+	popdef(`m_group')')
+
 /* name type setup code:vararg */
 define(`m_gen_bench_body',`
 $1`'_m`'m_LMUL:	pushdef(`m_code', `shift3($*)')
 	$3
 	li a0, WARMUP
 1:
-ifelse(m_LMUL,1,`m_gen_code_m1(m_code)')
-ifelse(m_LMUL,2,`m_gen_code_m2(m_code)')
-ifelse(m_LMUL,4,`m_gen_code_m4(m_code)')
-ifelse(m_LMUL,8,`m_gen_code_m8(m_code)')
+m_gen_code(m_code)
 	addi a0, a0, -1
 	bnez a0, 1b
 #if defined(USE_PERF_EVENT_SLOW)
@@ -708,10 +748,7 @@ ifelse(m_LMUL,8,`m_gen_code_m8(m_code)')
 	li a0, LOOP
 1:
 .rept UNROLL
-ifelse(m_LMUL,1,`m_gen_code_m1(m_code)')
-ifelse(m_LMUL,2,`m_gen_code_m2(m_code)')
-ifelse(m_LMUL,4,`m_gen_code_m4(m_code)')
-ifelse(m_LMUL,8,`m_gen_code_m8(m_code)')
+m_gen_code(m_code)
 .endr
 	addi a0, a0, -1
 	bnez a0, 1b
@@ -763,6 +800,9 @@ randomize:
 	li t6, -1
 	li t7, -1
 	li t8, -1
+	/* Fixed scalar throughput sources; never rotated or used for timing. */
+	li a5, -1
+	li a6, -1
 	fmv.w.x ft0, t0
 	fmv.w.x ft1, t0
 	fmv.w.x ft2, t0

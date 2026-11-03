@@ -1,3 +1,6 @@
 [submodule "thirdparty/veclibm"]
 	path = thirdparty/veclibm
 	url = https://github.com/rivosinc/veclibm
+[submodule "thirdparty/chacha20-riscv"]
+	path = thirdparty/chacha20-riscv
+	url = https://github.com/huxuan0307/chacha20-riscv

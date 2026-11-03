@@ -40,25 +40,27 @@ class RVVBenchResult:
     self.testName = testName
     self.caseNames = js["labels"][1:] 
     self.benchSizes = js["data"][0]
-    self.repeatTime = len(js["data"][1][0])
-    data = js["data"][1:]
+    # New benchmark output keeps raw cycle repeats in a separate field.
+    # Fall back to the legacy layout for previously generated JSON files.
+    data = js.get("repeats", js["data"][1:])
+    self.repeatTime = len(data[0][0])
     self.results = {}
     for i in range(len(self.caseNames)):
       name = self.caseNames[i]
       result = {}
       for j in range(0, len(self.benchSizes)):
         sz = self.benchSizes[j]
-        originData = data[i][j]
-        result[sz] = originData
+        result[sz] = data[i][j]
       self.results[name] = result
 
   def toDataFrame(self):
     lst = []
     for name, result in self.results.items():
       for sz, datas in result.items():
-        for data in datas:
-          if data != 0:
-            lst.append([name, sz, data])
+        if datas:
+          mean_cycles = np.mean(datas)
+          if mean_cycles != 0:
+            lst.append([name, sz, sz / mean_cycles])
     df = pandas.DataFrame(lst, columns=['case', 'size', 'Bpc'])
     return df
       
@@ -88,4 +90,3 @@ for name, res in benchResults.items():
   sns.lineplot(df, x = "size", y = "Bpc", hue = "case", ax=ax)
   ax.set_xscale("log")
   fig.savefig(f"{name}.png")
-

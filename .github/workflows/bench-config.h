@@ -1,5 +1,5 @@
 #define MAX_MEM (4096*8)
-#define NEXT(c) (c + c/3 + 3)
+#define NEXT(previous, current) ((previous) + (current))
 #define VALIDATE 1
 #define MIN_REPEATS 2
 #define MAX_REPEATS 2

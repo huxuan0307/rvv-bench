@@ -178,7 +178,9 @@ ux checksum(size_t n) {
 
 void common(size_t n, size_t dOff, size_t sOff) {
 	dest = mem + dOff; src = dest + MAX_MEM/2 + sOff + 9;
+#if MEMCPY_INIT
 	memset(dest, 0, n+9);
+#endif
 }
 
 BENCH_BEG(base) {
@@ -195,4 +197,3 @@ Bench benches[] = {
 	BENCH( impls, MAX_DEST - 521, "memcpy", bench_base ),
 	BENCH( impls, MAX_DEST - 521, "memcpy aligned", bench_aligned )
 }; BENCH_MAIN(benches)
-

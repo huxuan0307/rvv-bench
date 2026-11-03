@@ -1,8 +1,8 @@
 
 WARN=-Wall -Wextra -Wno-unused-function -Wno-unused-parameter
 
-GNU_TOOL_CHAIN=/nfs/home/huxuan/opt/RISCV/bin/
-TOOL_CHAIN_PREFIX=${GNU_TOOL_CHAIN}/riscv64-unknown-elf-
+GNU_TOOL_CHAIN=/nfs/share/riscv-toolchain-gcc16.1.0-260715-nightly/bin/
+TOOL_CHAIN_PREFIX=${GNU_TOOL_CHAIN}/riscv64-unknown-linux-gnu-
 
 # freestanding using any recent clang build
 # CC=clang

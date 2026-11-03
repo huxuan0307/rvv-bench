@@ -34,6 +34,8 @@ To run the benchmarks, first look through ([./bench/config.h](./bench/config.h))
 
 Now you can just run the benchmarks using `make run` in the ([./bench/](./bench/)) directory, or `make` to just build the executables.
 
+For `memcpy`, per-case destination initialization can be disabled with `make -C bench MEMCPY_INIT=0` (the default is `1`).
+
 ### Measuring cycle count ([./instructions/](./instructions/))
 
 To run the cycle count measurement, first configure [instructions/rvv/config.h](instructions/rvv/config.h) to your processor.
@@ -57,4 +59,3 @@ Here are some suggestions of things that still need to be done.
 ## License
 
 This repository is licensed under the MIT [LICENSE](LICENSE).
-
