@@ -27,6 +27,26 @@ python3 autovec/compare.py
 
 运行依赖 `/nfs/home/huxuan/opt/bin/riscv64-nemu-interpreter`，可通过 Make 的 `NEMU=` 或 run.py 的 `--nemu` 覆盖。NEMU 的 GOOD TRAP 和退出状态决定是否成功；超时/错误会保留日志并返回失败。NEMU 是功能验证环境，不将其 cycle 解释为硬件加速比。
 
+## TSVC 独立构建与运行
+
+```bash
+# 构建全部 151 项（写入标准 build/O3/manifest.json，清单只含 TSVC）
+make -C autovec tsvc
+# 全套三组构建仍使用 make -C autovec all
+
+# 只构建一个测试，清单与产物独立保存，不覆盖全套清单
+make -C autovec tsvc-one CASE=s151
+make -C autovec run-tsvc-one CASE=s151
+# Python 等价入口
+python3 autovec/build.py --suite tsvc --case s151
+```
+
+全套构建中每项产物位于 `build/O3/tsvc/s151/s151.elf` 和 `s151.bin`；单项构建位于 `build/O3/selected/tsvc/s151/tsvc/s151/`，对应单项清单位于 `build/O3/selected/tsvc/s151/manifest.json`。可直接向 NEMU 传入所需 BIN。
+
+生成目录 `build/generated/tsvc/` 中，每个测试独立为 `s151.c`（仅该内核及实际依赖的 helper）和 `s151_main.c`（仅调用该项），公共部分为 `arrays.c`、`common.c`、`dummy.c` 和头文件。保留上游 main 中的参数表达式，使用 `#line` 保留原始内核源码行号。内核与 main 分离，不启用 LTO，不编译其他测试内核。
+
+**初始化语义**：每个程序从全新 BSS 状态调用上游 init 和 initialise_arrays，不执行任何前序测试。上游未为部分四位编号提供独立初始化分支，另外有部分数组/别名依赖前序残留状态，因此独立模式不保证与原先顺序运行的 checksum 一样；本次实测 23 项与旧聚合运行不同。当前 151 项独立版本与各自标量参考均匹配。这是测试隔离后的输入状态差异，不应把聚合运行 checksum 作为独立运行的 golden。循环吞吐的测量归一化和时序模型不属于本次拆分改动。
+
 ## 覆盖与适配
 
 - TSVC_2：151 个原始 main 中调用的入口。循环体保留，LEN_1D=320（40 的倍数）、LEN_2D=32、iterations=32，保障除以 LEN_2D 的重复循环非空。gettimeofday 改为 cycle 读数，输出 cycle 与原始 checksum。

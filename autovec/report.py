@@ -25,6 +25,8 @@ def main():
         for file in sorted(dest.glob('*.vect')):
             if re.search(r'\.\d+t\.vect$', file.name):
                 continue
+            if case['suite'] == 'tsvc' and file.stem in ('common-3', 'arrays-2', 'dummy-4'):
+                continue  # Shared support is recompiled for each standalone case, not a test kernel.
             for line in file.read_text().splitlines():
                 m = re.match(r'(.+?):(\d+):(\d+): (optimized|missed): (.*)', line)
                 if not m:
@@ -90,10 +92,10 @@ def main():
     comparison_counts = {status: sum(x['status'] == status for x in comparisons) for status in ('exact-match', 'tolerance-match', 'different-or-missing')}
     text += ['', f"标量参考比对：{comparison_counts['exact-match']} 项精确匹配，{comparison_counts['tolerance-match']} 项在数值容差内，{comparison_counts['different-or-missing']} 项不匹配或缺失。详见 comparison.json。", '', '## 统计口径与限制', '',
 
-             '- 成功位点：GCC `-fopt-info-vec-all` 中 loop vectorized / basic block part vectorized 的源码位置与消息去重，包含初始化、检查代码；不等价于内核覆盖率。',
+             '- 成功位点：GCC `-fopt-info-vec-all` 中 loop vectorized / basic block part vectorized 的源码位置与消息去重；TSVC 排除逐项重复编译的公共 arrays/common/dummy 文件，其他测试组仍包含初始化、检查代码；不等价于内核覆盖率。',
              '- missed 位点只计 couldn\'t vectorize loop，GCC 同一循环有多次分析与变换，成功和 missed 可同时出现，不能据此直接计算失败率。',
              '- 内核 RVV 数量为反汇编中的静态指令数，含 vset 指令，不能解释为运行时执行次数或加速比。TSVC 使用 sNNN/v* 函数，PolyBench 使用 kernel_* 函数；LLVM 的混合 harness 统计是筛选后的近似值，精确归因见逐函数 JSON。',
-             '- TSVC：LEN_1D=320、LEN_2D=32、iterations=32；保留独立 dummy 翻译单元且不启用 LTO，全部原始主程序入口均执行。宿主时间调用换为 cycle 读取。',
+             '- TSVC：151 项独立源码/ELF/BIN，LEN_1D=320、LEN_2D=32、iterations=32；保留独立 dummy 翻译单元且不启用 LTO，每个程序仅执行一项。宿主时间调用换为 cycle 读取。独立 BSS 与上游部分不完全初始化导致 23 项 checksum 不同于旧聚合运行，但全部与各自独立标量参考匹配。',
              '- PolyBench 使用 SMALL_DATASET；LLVM 保留可移植标量循环与检查，适配范围和排除原因见移植说明。',
              '- NEMU 验证裸机启动和程序成功退出；各向量版本另外与关闭 loop/SLP vectorization 的同编译器构建逐项比较。PolyBench 比较所有 live-out 值，TSVC 比较原始 checksum，LLVM 用例比较上游驱动 checksum。模拟器周期不代表硬件性能。',
              '- 没有开展 LLVM 编译器实验；LLVM test-suite 在这里是由 GCC 编译的测试源码集合。', '', '## 逐项结果', '',

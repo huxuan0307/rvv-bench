@@ -29,9 +29,14 @@ def main():
     parser.add_argument('--opt', choices=['O2', 'O3'], default='O3')
     parser.add_argument('--suite', choices=['all', 'tsvc', 'polybench', 'llvm'], default='all')
     parser.add_argument('--jobs', type=int, default=8)
+    parser.add_argument('--case', help='Build one named test (requires --suite); keep its manifest separate')
     parser.add_argument('--scalar', action='store_true', help='validation reference; disable loop and SLP vectorization')
     args = parser.parse_args()
     build = HERE / 'build' / (args.opt + ('-scalar' if args.scalar else ''))
+    if args.case:
+        if args.suite == 'all' or not re.fullmatch(r'[A-Za-z0-9_-]+', args.case):
+            parser.error('--case requires an explicit --suite and a valid test name')
+        build = build / 'selected' / args.suite / args.case
     generated = HERE / 'build' / 'generated'
     build.mkdir(parents=True, exist_ok=True)
     import importlib
@@ -40,6 +45,10 @@ def main():
         if args.suite in ('all', suite):
             prepare = importlib.import_module('prepare_' + suite).prepare
             specs += prepare((args.sources / path).resolve(), generated / suite)
+    if args.case:
+        specs = [spec for spec in specs if spec['name'] == args.case]
+        if not specs:
+            parser.error(f'Unknown {args.suite} test: {args.case}')
     prefix = args.gcc.removesuffix('gcc')
     flags = [f'-{args.opt}', '-march=rv64gcv', '-mabi=lp64d', '-mcmodel=medany', '-ffreestanding', '-fno-builtin', '-fno-pie', '-fno-stack-protector', '-g', '-I', str(HERE)]
     if args.scalar:
