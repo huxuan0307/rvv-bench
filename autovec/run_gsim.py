@@ -228,6 +228,11 @@ def finish_reports(logs, metadata, cases):
         for path in logs.rglob(f'.{kind}_list'):
             lists[kind].update(path.read_text(errors='replace').splitlines())
     rows = [parse_case(case, logs, lists) for case in cases]
+    if metadata.get('provisional'):
+        finished = set.union(*lists.values())
+        for row in rows:
+            if row['name'] not in finished:
+                row.update(status='running-or-queued', reason='batch still in progress', total_cycles=None, cycles_per_outer_repetition=None)
     reports = ROOT / 'reports/tsvc-gsim-1024'
     counts = write_reports(reports, metadata, rows)
     run_id = Path(metadata['run_directory']).name

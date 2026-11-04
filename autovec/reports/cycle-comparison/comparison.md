@@ -1,0 +1,165 @@
+# Per-benchmark cycle comparison
+
+Values are raw **total_cycles** for successful measurements. Blank cells mean no successful measurement; they do not mean zero.
+
+This report makes no speedup claims and provides no scalar baseline. Different compiler flags, source pins, emulator/reference identities, repetition counts or timing protocols are separate configurations.
+
+The latest successful attempt wins over retries; if none succeeded, the latest failure is retained in the long table. Every attempt (including failures and superseded successes) is preserved in the JSON audit.
+
+## Configurations
+
+- **295efe803b2c**: /nfs/share/riscv-toolchain-gcc16.1.0-260715-nightly/bin/riscv64-unknown-linux-gnu-gcc; riscv64-unknown-linux-gnu-gcc (g6afcc4f6d) 16.1.0; -O3 -march=rv64gcv -mabi=lp64d -mcmodel=medany -ffreestanding -fno-builtin -fno-pie -fno-stack-protector -g -I /nfs/home/huxuan/repos/rvv-bench/autovec
+
+| Benchmark | 295efe803b2c |
+| --- | ---: |
+| tsvc/s000 | 166757 |
+| tsvc/s111 | 261942 |
+| tsvc/s1111 | 205364 |
+| tsvc/s1112 | 211445 |
+| tsvc/s1113 | 365435 |
+| tsvc/s1115 | 1198729 |
+| tsvc/s1119 | 247348 |
+| tsvc/s112 | 380255 |
+| tsvc/s113 | 166821 |
+| tsvc/s114 | 548844 |
+| tsvc/s115 | 1878400 |
+| tsvc/s116 | 189393 |
+| tsvc/s1161 | 2212736 |
+| tsvc/s118 | 2134947 |
+| tsvc/s119 | 5017771 |
+| tsvc/s121 | 181022 |
+| tsvc/s1213 | 529519 |
+| tsvc/s122 | 124040 |
+| tsvc/s1221 | 135169 |
+| tsvc/s123 | 461401 |
+| tsvc/s1232 | 1456103 |
+| tsvc/s124 | 220759 |
+| tsvc/s1244 | 698514 |
+| tsvc/s125 | 400731 |
+| tsvc/s1251 | 255677 |
+| tsvc/s126 | 1967132 |
+| tsvc/s127 | 117728 |
+| tsvc/s1279 | 1474766 |
+| tsvc/s128 | 254653 |
+| tsvc/s1281 | 290351 |
+| tsvc/s131 | 181152 |
+| tsvc/s13110 | 2150853 |
+| tsvc/s132 | 23790 |
+| tsvc/s1351 | 180756 |
+| tsvc/s141 | 724830 |
+| tsvc/s1421 | 89204 |
+| tsvc/s151 | 181267 |
+| tsvc/s152 | 267753 |
+| tsvc/s161 | 2621521 |
+| tsvc/s162 | 195935 |
+| tsvc/s171 | 180885 |
+| tsvc/s172 | 180310 |
+| tsvc/s173 | 88748 |
+| tsvc/s174 | 88012 |
+| tsvc/s175 | 181367 |
+| tsvc/s176 |  |
+| tsvc/s2101 | 68621 |
+| tsvc/s2102 | 1151264 |
+| tsvc/s211 | 627778 |
+| tsvc/s2111 |  |
+| tsvc/s212 | 593216 |
+| tsvc/s221 | 1374241 |
+| tsvc/s222 | 1197019 |
+| tsvc/s2233 | 4225983 |
+| tsvc/s2244 | 245837 |
+| tsvc/s2251 | 676116 |
+| tsvc/s2275 | 817817 |
+| tsvc/s231 | 350505 |
+| tsvc/s232 | 785027 |
+| tsvc/s233 | 2951265 |
+| tsvc/s235 | 1758110 |
+| tsvc/s241 | 697047 |
+| tsvc/s242 | 3179250 |
+| tsvc/s243 | 297598 |
+| tsvc/s244 | 748933 |
+| tsvc/s251 | 196532 |
+| tsvc/s252 | 435487 |
+| tsvc/s253 | 1969908 |
+| tsvc/s254 | 737424 |
+| tsvc/s255 | 531244 |
+| tsvc/s256 | 1879559 |
+| tsvc/s257 | 2936770 |
+| tsvc/s258 | 86518 |
+| tsvc/s261 | 617847 |
+| tsvc/s271 | 1311019 |
+| tsvc/s2710 | 1053729 |
+| tsvc/s2711 | 1310955 |
+| tsvc/s2712 | 1802268 |
+| tsvc/s272 | 1486853 |
+| tsvc/s273 | 1727409 |
+| tsvc/s274 | 1966401 |
+| tsvc/s275 | 2023402 |
+| tsvc/s276 | 213811 |
+| tsvc/s277 | 692796 |
+| tsvc/s278 | 1720434 |
+| tsvc/s279 | 3768973 |
+| tsvc/s281 | 750421 |
+| tsvc/s291 | 737425 |
+| tsvc/s292 | 531471 |
+| tsvc/s293 | 111783 |
+| tsvc/s311 | 1259894 |
+| tsvc/s3110 | 2156106 |
+| tsvc/s3111 | 1267994 |
+| tsvc/s31111 | 14831 |
+| tsvc/s3112 | 655542 |
+| tsvc/s3113 | 1336552 |
+| tsvc/s312 | 861989 |
+| tsvc/s313 | 1262235 |
+| tsvc/s314 | 1277149 |
+| tsvc/s315 | 680426 |
+| tsvc/s316 | 558569 |
+| tsvc/s317 | 328604 |
+| tsvc/s318 | 1342554 |
+| tsvc/s319 | 1295553 |
+| tsvc/s321 | 1255304 |
+| tsvc/s322 | 2416161 |
+| tsvc/s323 | 2561666 |
+| tsvc/s3251 | 2197379 |
+| tsvc/s331 | 567869 |
+| tsvc/s332 | 629842 |
+| tsvc/s341 | 661632 |
+| tsvc/s342 | 663949 |
+| tsvc/s343 | 2503789 |
+| tsvc/s351 | 313940 |
+| tsvc/s352 | 1284080 |
+| tsvc/s353 | 2394947 |
+| tsvc/s4112 | 983425 |
+| tsvc/s4113 | 557747 |
+| tsvc/s4114 | 1055545 |
+| tsvc/s4115 | 1215427 |
+| tsvc/s4116 | 74729 |
+| tsvc/s4117 | 1269698 |
+| tsvc/s4121 | 196537 |
+| tsvc/s421 | 181169 |
+| tsvc/s422 | 180404 |
+| tsvc/s423 | 180187 |
+| tsvc/s424 | 180511 |
+| tsvc/s431 | 180866 |
+| tsvc/s441 | 1536112 |
+| tsvc/s442 | 682187 |
+| tsvc/s443 | 221562 |
+| tsvc/s451 |  |
+| tsvc/s452 | 299816 |
+| tsvc/s453 | 732163 |
+| tsvc/s471 | 229333 |
+| tsvc/s481 | 704408 |
+| tsvc/s482 | 675622 |
+| tsvc/s491 | 697089 |
+| tsvc/va | 166932 |
+| tsvc/vag | 420400 |
+| tsvc/vas | 421529 |
+| tsvc/vbor | 176933 |
+| tsvc/vdotr | 1262343 |
+| tsvc/vif | 169731 |
+| tsvc/vpv | 180889 |
+| tsvc/vpvpv | 195074 |
+| tsvc/vpvts | 181540 |
+| tsvc/vpvtv | 196576 |
+| tsvc/vsumr | 1260472 |
+| tsvc/vtv | 180799 |
+| tsvc/vtvtv | 195499 |
