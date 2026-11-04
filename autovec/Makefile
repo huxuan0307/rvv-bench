@@ -6,6 +6,11 @@ OPT ?= O3
 JOBS ?= 8
 NEMU ?= /nfs/home/huxuan/opt/bin/riscv64-nemu-interpreter
 CASE ?= s000
+GSIM_JOBS ?= 32
+GSIM_TIMEOUT ?= 2h
+.PHONY: gsim
+gsim:
+	$(PYTHON) run_gsim.py --manifest build/$(OPT)/manifest.json --jobs $(GSIM_JOBS) --timeout $(GSIM_TIMEOUT)
 .PHONY: all run report compare tsvc tsvc-one run-tsvc-one
 tsvc:
 	$(PYTHON) build.py --sources $(SOURCES) --gcc $(GCC) --opt $(OPT) --jobs $(JOBS) --suite tsvc

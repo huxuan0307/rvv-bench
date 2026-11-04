@@ -45,11 +45,24 @@ python3 autovec/build.py --suite tsvc --case s151
 
 生成目录 `build/generated/tsvc/` 中，每个测试独立为 `s151.c`（仅该内核及实际依赖的 helper）和 `s151_main.c`（仅调用该项），公共部分为 `arrays.c`、`common.c`、`dummy.c` 和头文件。保留上游 main 中的参数表达式，使用 `#line` 保留原始内核源码行号。内核与 main 分离，不启用 LTO，不编译其他测试内核。
 
-**初始化语义**：每个程序从全新 BSS 状态调用上游 init 和 initialise_arrays，不执行任何前序测试。上游未为部分四位编号提供独立初始化分支，另外有部分数组/别名依赖前序残留状态，因此独立模式不保证与原先顺序运行的 checksum 一样；本次实测 23 项与旧聚合运行不同。当前 151 项独立版本与各自标量参考均匹配。这是测试隔离后的输入状态差异，不应把聚合运行 checksum 作为独立运行的 golden。循环吞吐的测量归一化和时序模型不属于本次拆分改动。
+**初始化语义**：每个程序从全新 BSS 状态调用上游 init 和 initialise_arrays，不执行任何前序测试。上游未为部分四位编号提供独立初始化分支，另外有部分数组/别名依赖前序残留状态，因此独立模式不保证与原先顺序运行的 checksum 一样；本次实测 23 项与旧聚合运行不同。当前 151 项独立版本与各自标量参考均匹配。这是测试隔离后的输入状态差异，不应把聚合运行 checksum 作为独立运行的 golden。最新计时配置把每项外层 `nl` 重复循环统一为恰好 1024 次，取消上游按测试设置的乘除缩放；内层 LEN_1D=320、LEN_2D=32 不变。
+
+## gsim 循环计时
+
+```bash
+python3 autovec/build.py --suite tsvc --jobs 16
+python3 autovec/run_gsim.py --jobs 32 --timeout 2h
+# 仅测一项
+python3 autovec/run_gsim.py --case s000 --jobs 1
+```
+
+生成内核在原始计时边界内联两条 `csrr ..., cycle`，附带编译器 memory barrier；初始化和 checksum 在计时区间外，区间包含 1024 次外层重复、内层循环、dummy 调用及循环控制。未减去 CSR 读数开销，也未插入硬件 fence；结果是该代码区间的 CSR 周期差，不保证最后一次 store 已写回外部内存。输出 `AV cycles=... checksum=... iterations=1024`；`cycles/1024` 表示一次完整外层重复的平均周期，不是单个内层元素或一条 RVV 指令的吞吐。
+
+脚本调用 PATH 中的 run_emu.sh（当前安装位置 `/nfs/home/huxuan/opt/bin/run_emu.sh`），自动选择 `/nfs/share/huxuan/emus/emu-gsim-*` 中修改时间最新者，开启 diff，参考模型为 `/nfs/share/huxuan/riscv64-nemu-interpreter-so-fixvfredusum`。并发范围 1–64，默认32。按清单生成扁平 BIN 软链接目录，避免运行旧聚合镜像。日志位于忽略的 `build/gsim-1024/`，结果保存到 `reports/tsvc-gsim-1024/results.{md,csv,json}`，逐项检查 runner 状态、GOOD TRAP、cycle 输出和错误日志；超时不会当成成功。
 
 ## 覆盖与适配
 
-- TSVC_2：151 个原始 main 中调用的入口。循环体保留，LEN_1D=320（40 的倍数）、LEN_2D=32、iterations=32，保障除以 LEN_2D 的重复循环非空。gettimeofday 改为 cycle 读数，输出 cycle 与原始 checksum。
+- TSVC_2：151 个原始 main 中调用的入口。保留内层循环体，LEN_1D=320（40 的倍数）、LEN_2D=32，各项外层重复统一为1024次。原 gettimeofday 边界改为内联 csrr cycle，输出总周期、原始 checksum 与外层迭代次数。
 - PolyBench/C：全部 30 个维护中的内核，SMALL_DATASET，保留参数化循环边界和原始 kernel 调用，kernel 标记 noinline 方便归因。替换宿主 instrumentation/内存分配接口，无缓存冲刷或调度。输出 live-out 数组用于参考比较，详见 [移植说明](polybench_notes.md)。
 - LLVM Vectorizer：10 个上游 C++ 标量循环程序，替换 STL/计时宿主驱动并保留检查，详见 [移植说明](llvm_notes.md)。对特别大的宿主数据组合采用明确记录的边界采样；保留循环内核长度。兼容层只服务这些用例，不是通用 C++ 标准库。
 

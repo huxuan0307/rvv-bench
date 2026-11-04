@@ -19,6 +19,10 @@ class SplitTests(unittest.TestCase):
                 body = Path(r['sources'][0]).read_text()
                 entries = re.findall(r'^real_t (\w+)\(struct args_t', body, re.M)
                 self.assertEqual(entries, [r['name']])
+                self.assertEqual(body.count('csrr %0, cycle'), 2)
+                self.assertEqual(body.count('nl < 1024;'), 1)
+                self.assertNotIn('gettimeofday', body)
+                self.assertEqual(r['outer_iterations'], 1024)
                 self.assertTrue(all(Path(s).is_file() for s in r['sources']))
             for name, helper in [('s151', 's151s'), ('s152', 's152s'), ('s31111', 'test'), ('s471', 's471s'), ('s4121', 'f')]:
                 self.assertIn(helper, by_name[name]['helper_functions'])

@@ -23,7 +23,7 @@ def prepare(source: Path, output: Path) -> list[dict]:
         adapted = (source / name).read_text()
         adapted = re.sub(r'^#include <[^>]+>\s*$', '', adapted, flags=re.M)
         if name == 'common.h':
-            adapted = adapted.replace('#define iterations 100000', '#define iterations 32')
+            adapted = adapted.replace('#define iterations 100000', '#define iterations 1024')
             adapted = adapted.replace('#define LEN_1D 32000', '#define LEN_1D 320')
             adapted = adapted.replace('#define LEN_2D 256', '#define LEN_2D 32')
         (output / name).write_text('#include "av_runtime.h"\n' + adapted)
@@ -39,16 +39,28 @@ def prepare(source: Path, output: Path) -> list[dict]:
                     selected.add(helper)
                     pending.append(helper)
         # Preserve upstream definition order and source line attribution.
-        body = include
+        body = include + 'extern uint64_t av_tsvc_cycles;\n'
         for fn, match in sorted(functions.items(), key=lambda item: item[1].start()):
             if fn in selected:
                 line = text[:match.start()].count('\n') + 1
-                body += f'\n#line {line} "tsvc.c"\n{match.group()}\n'
+                function = match.group()
+                if fn == name:
+                    function, repeats = re.subn(r'(for\s*\(int nl = 0; nl < )[^;]+(; nl\+\+\))', r'\g<1>1024\2', function)
+                    if repeats != 1:
+                        raise ValueError(f'{name}: expected exactly one outer repetition loop')
+                    start = 'gettimeofday(&func_args->t1, NULL);'
+                    end = 'gettimeofday(&func_args->t2, NULL);'
+                    if function.count(start) != 1 or function.count(end) != 1:
+                        raise ValueError(f'{name}: unexpected timing boundaries')
+                    function = function.replace(start, 'uint64_t cycle_begin, cycle_end;\n    __asm__ volatile("csrr %0, cycle" : "=r"(cycle_begin) :: "memory");')
+                    function = function.replace(end, '__asm__ volatile("csrr %0, cycle" : "=r"(cycle_end) :: "memory");\n    av_tsvc_cycles = cycle_end - cycle_begin;')
+                body += f'\n#line {line} "tsvc.c"\n{function}\n'
         kernel = output / f'{name}.c'
         kernel.write_text(body)
         driver = output / f'{name}_main.c'
         driver.write_text(include + f'''
 real_t {name}(struct args_t *);
+uint64_t av_tsvc_cycles;
 int main(void) {{
     int n1 = 1, n3 = 1;
     int *ip;
@@ -56,8 +68,8 @@ int main(void) {{
     init(&ip, &s1, &s2);
     struct args_t args = {{.arg_info = {argument}}};
     double result = {name}(&args);
-    unsigned long long cycles = (unsigned long long)(args.t2.tv_usec - args.t1.tv_usec);
-    printf("AV cycles=%llu checksum=%.9g\\n", cycles, result);
+    unsigned long long cycles = (unsigned long long)av_tsvc_cycles;
+    printf("AV cycles=%llu checksum=%.9g iterations=1024\\n", cycles, result);
     return EXIT_SUCCESS;
 }}
 ''')
@@ -65,5 +77,6 @@ int main(void) {{
                         'sources': [str(kernel), str(driver)] + [str(output / f) for f in ('arrays.c', 'common.c', 'dummy.c')],
                         'include_dirs': [str(output)], 'defines': [],
                         'kernel_sources': [kernel.name], 'kernel_functions': [name],
-                        'helper_functions': sorted(selected - {name}), 'upstream_argument': argument})
+                        'helper_functions': sorted(selected - {name}), 'upstream_argument': argument,
+                        'outer_iterations': 1024, 'timing': 'inline csrr cycle around outer loop; includes dummy'})
     return records
