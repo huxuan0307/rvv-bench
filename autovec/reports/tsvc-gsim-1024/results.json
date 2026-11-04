@@ -1,6 +1,8 @@
 {
   "metadata": {
     "started_at": "2026-11-04T18:49:18+08:00",
+    "timing": "inline csrr cycle around 1024 outer repetitions, including dummy; excludes initialization and checksum; raw delta without overhead subtraction",
+    "started_at_source": "runner.log (runner local time)",
     "manifest": "/nfs/home/huxuan/repos/rvv-bench/autovec/build/O3/manifest.json",
     "manifest_sha256": "3946ddcfe791f688bfdbcda628df39c52888fe2a8b59f577029c9a798d830ce5",
     "emulator": {
@@ -17,6 +19,31 @@
       "mtime_ns": 1792239980991969000,
       "mtime": "2026-10-17T12:26:20.991969+00:00"
     },
+    "runner": {
+      "path": "/nfs/home/huxuan/opt/bin/run_emu.sh",
+      "resolved_path": "/nfs/home/huxuan/repos/XiangShanVector/run_emu.sh",
+      "size": 14473,
+      "mtime_ns": 1791997306475679000,
+      "mtime": "2026-10-14T17:01:46.475679+00:00"
+    },
+    "jobs": 32,
+    "timeout": "2h",
+    "command": [
+      "/nfs/home/huxuan/opt/bin/run_emu.sh",
+      "-e",
+      "/nfs/share/huxuan/emus/emu-gsim-20261030-005119-6a2a474d04",
+      "-r",
+      "/nfs/share/huxuan/riscv64-nemu-interpreter-so-fixvfredusum",
+      "-t",
+      "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T104917Z-5ojcjg4e/bin",
+      "-j",
+      "32",
+      "--timeout",
+      "2h",
+      "-o",
+      "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T104917Z-5ojcjg4e/logs"
+    ],
+    "identity_observation": "file identities observed at collection; paths recovered from runner.log",
     "build": {
       "sources": {
         "TSVC_2": {
@@ -53,14 +80,12 @@
       "optimizer": "The following options control optimizations:\n  --param=lto-partition-locality-cloning= \tmaximal\n  --param=lto-partition-locality-heuristics= \t[default]\n  -O<number>                  \t\t\n  -Ofast                      \t\t\n  -Og                         \t\t\n  -Os                         \t\t\n  -Oz                         \t\t\n  -faggressive-loop-optimizations \t[enabled]\n  -falign-functions           \t\t[enabled]\n  -falign-functions=          \t\t\n  -falign-jumps               \t\t[enabled]\n  -falign-jumps=              \t\t\n  -falign-labels              \t\t[enabled]\n  -falign-labels=             \t\t\n  -falign-loops               \t\t[enabled]\n  -falign-loops=              \t\t\n  -fallocation-dce            \t\t[enabled]\n  -fallow-store-data-races    \t\t[disabled]\n  -fassociative-math          \t\t[disabled]\n  -fassume-sane-operators-new-delete \t[available in C++, ObjC++]\n  -fasynchronous-unwind-tables \t\t[enabled]\n  -fauto-inc-dec              \t\t[enabled]\n  -fauto-profile-inlining     \t\t[enabled]\n  -favoid-store-forwarding    \t\t[disabled]\n  -fbit-tests                 \t\t[enabled]\n  -fbranch-count-reg          \t\t[enabled]\n  -fbranch-probabilities      \t\t[disabled]\n  -fcaller-saves              \t\t[enabled]\n  -fcode-hoisting             \t\t[enabled]\n  -fcombine-stack-adjustments \t\t[enabled]\n  -fcompare-elim              \t\t[enabled]\n  -fconserve-stack            \t\t[disabled]\n  -fcprop-registers           \t\t[enabled]\n  -fcrossjumping              \t\t[enabled]\n  -fcse-follow-jumps          \t\t[enabled]\n  -fcx-method=                \t\tstdc\n  -fdce                       \t\t[enabled]\n  -fdefer-pop                 \t\t[enabled]\n  -fdelayed-branch            \t\t[disabled]\n  -fdelete-dead-exceptions    \t\t[disabled]\n  -fdelete-null-pointer-checks \t\t\n  -fdep-fusion                \t\t[enabled]\n  -fdevirtualize              \t\t[enabled]\n  -fdevirtualize-speculatively \t\t[enabled]\n  -fdse                       \t\t[enabled]\n  -fearly-inlining            \t\t[enabled]\n  -fexceptions                \t\t[available in D, Modula-2]\n  -fexcess-precision=[fast|standard|16] \t[default]\n  -fexpensive-optimizations   \t\t[enabled]\n  -fext-dce                   \t\t[enabled]\n  -ffast-math                 \t\t\n  -ffinite-loops              \t\t[disabled]\n  -ffinite-math-only          \t\t[disabled]\n  -ffloat-store               \t\t[disabled]\n  -ffold-mem-offsets          \t\t[enabled]\n  -ffold-simple-inlines       \t\t[available in C++, ObjC++]\n  -fforward-propagate         \t\t[enabled]\n  -ffp-contract=[off|on|fast] \t\tfast\n  -ffp-int-builtin-inexact    \t\t[enabled]\n  -ffunction-cse              \t\t[enabled]\n  -fgcse                      \t\t[enabled]\n  -fgcse-after-reload         \t\t[enabled]\n  -fgcse-las                  \t\t[disabled]\n  -fgcse-lm                   \t\t[enabled]\n  -fgcse-sm                   \t\t[disabled]\n  -fgraphite                  \t\t[disabled]\n  -fgraphite-identity         \t\t[disabled]\n  -fguess-branch-probability  \t\t[enabled]\n  -fhandle-exceptions         \t\t-fexceptions\n  -fhardcfr-check-exceptions  \t\t\n  -fhardcfr-check-noreturn-calls=[always|no-xthrow|nothrow|never] \t[default]\n  -fhardcfr-check-returning-calls \t\n  -fhardcfr-skip-leaf         \t\t[disabled]\n  -fharden-compares           \t\t[disabled]\n  -fharden-conditional-branches \t[disabled]\n  -fharden-control-flow-redundancy \t[disabled]\n  -fhoist-adjacent-loads      \t\t[enabled]\n  -fif-conversion             \t\t[enabled]\n  -fif-conversion2            \t\t[enabled]\n  -findirect-inlining         \t\t[enabled]\n  -finline                    \t\t[enabled]\n  -finline-atomics            \t\t[enabled]\n  -finline-functions          \t\t[enabled]\n  -finline-functions-called-once \t[enabled]\n  -finline-small-functions    \t\t[enabled]\n  -finline-stringops          \t\t[disabled]\n  -finline-stringops=         \t\t[default]\n  -fipa-bit-cp                \t\t[enabled]\n  -fipa-cp                    \t\t[enabled]\n  -fipa-cp-clone              \t\t[enabled]\n  -fipa-icf                   \t\t[enabled]\n  -fipa-icf-functions         \t\t[enabled]\n  -fipa-icf-variables         \t\t[enabled]\n  -fipa-modref                \t\t[enabled]\n  -fipa-profile               \t\t[enabled]\n  -fipa-pta                   \t\t[disabled]\n  -fipa-pure-const            \t\t[enabled]\n  -fipa-ra                    \t\t[enabled]\n  -fipa-reference             \t\t[enabled]\n  -fipa-reference-addressable \t\t[enabled]\n  -fipa-reorder-for-locality  \t\t[disabled]\n  -fipa-sra                   \t\t[enabled]\n  -fipa-stack-alignment       \t\t[enabled]\n  -fipa-strict-aliasing       \t\t[enabled]\n  -fipa-vrp                   \t\t[enabled]\n  -fira-algorithm=[CB|priority] \tCB\n  -fira-hoist-pressure        \t\t[enabled]\n  -fira-loop-pressure         \t\t[disabled]\n  -fira-region=[one|all|mixed] \t\tone\n  -fira-share-save-slots      \t\t[enabled]\n  -fira-share-spill-slots     \t\t[enabled]\n  -fisolate-erroneous-paths-attribute \t[disabled]\n  -fisolate-erroneous-paths-dereference \t[enabled]\n  -fivopts                    \t\t[enabled]\n  -fjump-tables               \t\t[enabled]\n  -fkeep-gc-roots-live        \t\t[disabled]\n  -flate-combine-instructions \t\t[enabled]\n  -flifetime-dse              \t\t[enabled]\n  -flifetime-dse=<0,2>        \t\t2\n  -flimit-function-alignment  \t\t[disabled]\n  -flive-patching             \t\t-flive-patching=inline-clone\n  -flive-patching=[inline-only-static|inline-clone] \t[default]\n  -flive-range-shrinkage      \t\t[disabled]\n  -floop-interchange          \t\t[enabled]\n  -floop-nest-optimize        \t\t[disabled]\n  -floop-parallelize-all      \t\t[disabled]\n  -floop-unroll-and-jam       \t\t[enabled]\n  -flra-remat                 \t\t[enabled]\n  -fmalloc-dce                \t\t[enabled]\n  -fmalloc-dce=<0,2>          \t\t0\n  -fmath-errno                \t\t[enabled]\n  -fmin-function-alignment=   \t\t0\n  -fmodulo-sched              \t\t[disabled]\n  -fmodulo-sched-allow-regmoves \t[disabled]\n  -fmove-loop-invariants      \t\t[enabled]\n  -fmove-loop-stores          \t\t[enabled]\n  -fno-inline-stringops       \t\t[enabled]\n  -fnon-call-exceptions       \t\t[disabled]\n  -fnothrow-opt               \t\t[available in C++, ObjC++]\n  -fomit-frame-pointer        \t\t[enabled]\n  -fopenmp-target-simd-clone= \t\tnohost\n  -fopt-info                  \t\t[disabled]\n  -foptimize-crc              \t\t[enabled]\n  -foptimize-sibling-calls    \t\t[enabled]\n  -foptimize-strlen           \t\t[enabled]\n  -fpack-struct               \t\t[disabled]\n  -fpack-struct=<number>      \t\t\n  -fpartial-inlining          \t\t[enabled]\n  -fpatchable-function-entry= \t\t\n  -fpcc-struct-return         \t\t[disabled]\n  -fpeel-loops                \t\t[enabled]\n  -fpeephole                  \t\t[enabled]\n  -fpeephole2                 \t\t[enabled]\n  -fplt                       \t\t[enabled]\n  -fpredictive-commoning      \t\t[enabled]\n  -fprefetch-loop-arrays      \t\t\n  -fprintf-return-value       \t\t[enabled]\n  -fprofile-partial-training  \t\t[disabled]\n  -fprofile-reorder-functions \t\t[disabled]\n  -freciprocal-math           \t\t[disabled]\n  -free                       \t\t[enabled]\n  -freg-struct-return         \t\t-fpcc-struct-return\n  -frename-registers          \t\t[disabled]\n  -freorder-blocks            \t\t[enabled]\n  -freorder-blocks-algorithm=[simple|stc] \tstc\n  -freorder-blocks-and-partition \t[disabled]\n  -freorder-functions         \t\t[enabled]\n  -frerun-cse-after-loop      \t\t[enabled]\n  -freschedule-modulo-scheduled-loops \t[disabled]\n  -frounding-math             \t\t[disabled]\n  -frtti                      \t\t[available in C++, D, ObjC++]\n  -fsave-optimization-record  \t\t[disabled]\n  -fsched-critical-path-heuristic \t[enabled]\n  -fsched-dep-count-heuristic \t\t[enabled]\n  -fsched-group-heuristic     \t\t[enabled]\n  -fsched-interblock          \t\t[enabled]\n  -fsched-last-insn-heuristic \t\t[enabled]\n  -fsched-pressure            \t\t[enabled]\n  -fsched-rank-heuristic      \t\t[enabled]\n  -fsched-spec                \t\t[enabled]\n  -fsched-spec-insn-heuristic \t\t[enabled]\n  -fsched-spec-load           \t\t[disabled]\n  -fsched-spec-load-dangerous \t\t[disabled]\n  -fsched-stalled-insns       \t\t[disabled]\n  -fsched-stalled-insns-dep   \t\t[enabled]\n  -fsched-stalled-insns-dep=<number> \t\n  -fsched-stalled-insns=<number> \t\n  -fsched2-use-superblocks    \t\t[disabled]\n  -fschedule-fusion           \t\t[enabled]\n  -fschedule-insns            \t\t[enabled]\n  -fschedule-insns2           \t\t[enabled]\n  -fsection-anchors           \t\t[enabled]\n  -fsel-sched-pipelining      \t\t[disabled]\n  -fsel-sched-pipelining-outer-loops \t[disabled]\n  -fsel-sched-reschedule-pipelined \t[disabled]\n  -fselective-scheduling      \t\t[disabled]\n  -fselective-scheduling2     \t\t[disabled]\n  -fsemantic-interposition    \t\t[enabled]\n  -fshort-enums               \t\t[disabled]\n  -fshort-wchar               \t\t[disabled]\n  -fshrink-wrap               \t\t[enabled]\n  -fshrink-wrap-separate      \t\t[enabled]\n  -fsignaling-nans            \t\t[disabled]\n  -fsigned-zeros              \t\t[enabled]\n  -fsimd-cost-model=[unlimited|dynamic|cheap|very-cheap] \tunlimited\n  -fsingle-precision-constant \t\t[disabled]\n  -fspeculatively-call-stored-functions \t[enabled]\n  -fsplit-ivs-in-unroller     \t\t[enabled]\n  -fsplit-loops               \t\t[enabled]\n  -fsplit-paths               \t\t[enabled]\n  -fsplit-wide-types          \t\t[enabled]\n  -fsplit-wide-types-early    \t\t[disabled]\n  -fssa-backprop              \t\t[enabled]\n  -fssa-phiopt                \t\t[enabled]\n  -fstack-check=[no|generic|specific] \t\n  -fstack-clash-protection    \t\t[disabled]\n  -fstack-protector           \t\t[disabled]\n  -fstack-protector-all       \t\t[disabled]\n  -fstack-protector-explicit  \t\t[disabled]\n  -fstack-protector-strong    \t\t[disabled]\n  -fstack-reuse=[all|named_vars|none] \tall\n  -fstdarg-opt                \t\t[enabled]\n  -fstore-merging             \t\t[enabled]\n  -fstrict-aliasing           \t\t[enabled]\n  -fstrict-enums              \t\t[available in C++, ObjC++]\n  -fstrict-volatile-bitfields \t\t\n  -fthread-jumps              \t\t[enabled]\n  -fno-threadsafe-statics     \t\t[available in C++, ObjC++]\n  -ftoplevel-reorder          \t\t[enabled]\n  -ftracer                    \t\t[disabled]\n  -ftrapping-math             \t\t[enabled]\n  -ftrapv                     \t\t[disabled]\n  -ftree-bit-ccp              \t\t[enabled]\n  -ftree-builtin-call-dce     \t\t[enabled]\n  -ftree-ccp                  \t\t[enabled]\n  -ftree-ch                   \t\t[enabled]\n  -ftree-coalesce-vars        \t\t[enabled]\n  -ftree-copy-prop            \t\t[enabled]\n  -ftree-cselim               \t\t[disabled]\n  -ftree-dce                  \t\t[enabled]\n  -ftree-dominator-opts       \t\t[enabled]\n  -ftree-dse                  \t\t[enabled]\n  -ftree-forwprop             \t\t[enabled]\n  -ftree-fre                  \t\t[enabled]\n  -ftree-loop-distribute-patterns \t[enabled]\n  -ftree-loop-distribution    \t\t[enabled]\n  -ftree-loop-if-convert      \t\t\n  -ftree-loop-im              \t\t[enabled]\n  -ftree-loop-ivcanon         \t\t[enabled]\n  -ftree-loop-optimize        \t\t[enabled]\n  -ftree-loop-vectorize       \t\t[enabled]\n  -ftree-parallelize-loops=<number> \t1\n  -ftree-partial-pre          \t\t[enabled]\n  -ftree-phiprop              \t\t[enabled]\n  -ftree-pre                  \t\t[enabled]\n  -ftree-pta                  \t\t[enabled]\n  -ftree-reassoc              \t\t[enabled]\n  -ftree-scev-cprop           \t\t[enabled]\n  -ftree-sink                 \t\t[enabled]\n  -ftree-slp-vectorize        \t\t[enabled]\n  -ftree-slsr                 \t\t[enabled]\n  -ftree-sra                  \t\t[enabled]\n  -ftree-switch-conversion    \t\t[enabled]\n  -ftree-tail-merge           \t\t[enabled]\n  -ftree-ter                  \t\t[enabled]\n  -ftree-vectorize            \t\t[disabled]\n  -ftree-vrp                  \t\t[enabled]\n  -ftrivial-auto-var-init=[uninitialized|pattern|zero] \tuninitialized\n  -funconstrained-commons     \t\t[disabled]\n  -funreachable-traps         \t\t[disabled]\n  -funroll-all-loops          \t\t[disabled]\n  -funroll-completely-grow-size \t[enabled]\n  -funroll-loops              \t\t[disabled]\n  -funsafe-math-optimizations \t\t[disabled]\n  -funswitch-loops            \t\t[enabled]\n  -funwind-tables             \t\t[enabled]\n  -fvar-tracking              \t\t[enabled]\n  -fvar-tracking-assignments  \t\t[enabled]\n  -fvar-tracking-assignments-toggle \t[disabled]\n  -fvar-tracking-uninit       \t\t[enabled]\n  -fvariable-expansion-in-unroller \t[disabled]\n  -fvect-cost-model=[unlimited|dynamic|cheap|very-cheap] \tdynamic\n  -fversion-loops-for-strides \t\t[enabled]\n  -fvpt                       \t\t[disabled]\n  -fweb                       \t\t[disabled]\n  -fwrapv                     \t\t[disabled]\n  -fwrapv-pointer             \t\t[disabled]\n  -gstatement-frontiers       \t\t[enabled]\n\n",
       "target": "The following options are target specific:\n  --param=fpr2vr-cost=        \t\t-1\n  --param=gpr2vr-cost=        \t\t-1\n  --param=riscv-autovec-mode= \t\t\n  --param=riscv-strcmp-inline-limit= \t64\n  --param=riscv-two-source-permutes \t[disabled]\n  --param=vr2fpr-cost=        \t\t-1\n  --param=vr2gpr-cost=        \t\t-1\n  -param=vsetvl-strategy=<string> \toptim\n  --print-supported-extensions \t\t-march=help\n  -ffuse-ops-with-volatile-access \t[enabled]\n  -mabi=                      \t\tlp64d\n  -madjust-lmul-cost          \t\t[disabled]\n  -malign-data=               \t\txlen\n  -march=                     \t\trv64imafdcv_zicsr_zifencei_zmmul_zaamo_zalrsc_zca_zcd_zve32f_zve32x_zve64d_zve64f_zve64x_zvl128b_zvl32b_zvl64b\n  -march=help                 \t\t[disabled]\n  -mautovec-segment           \t\t[enabled]\n  -mbig-endian                \t\t[disabled]\n  -mbionic                    \t\t[disabled]\n  -mbranch-cost=N             \t\t4\n  -mcmodel=                   \t\tmedany\n  -mcpu=PROCESSOR             \t\t\n  -mcsr-check                 \t\t[disabled]\n  -mdiv                       \t\t[enabled]\n  -mexplicit-relocs           \t\t[disabled]\n  -mfdiv                      \t\t[enabled]\n  -mfence-tso                 \t\t[enabled]\n  -mglibc                     \t\t[enabled]\n  -minline-atomics            \t\t[enabled]\n  -minline-strcmp             \t\t[enabled]\n  -minline-strlen             \t\t[enabled]\n  -minline-strncmp            \t\t[enabled]\n  -misa-spec=                 \t\t20191213\n  -mlittle-endian             \t\t[enabled]\n  -mmax-vectorization         \t\t[disabled]\n  -mmovcc                     \t\t[disabled]\n  -mmusl                      \t\t[disabled]\n  -momit-leaf-frame-pointer   \t\t[disabled]\n  -mplt                       \t\t-fplt\n  -mpreferred-stack-boundary= \t\t0\n  -mrelax                     \t\t[enabled]\n  -mriscv-attribute           \t\t[enabled]\n  -mrvv-max-lmul=<string>     \t\tm1\n  -mrvv-vector-bits=<string>  \t\tscalable\n  -msave-restore              \t\t[disabled]\n  -mscalar-strict-align       \t\t-mstrict-align\n  -mshorten-memrefs           \t\t[enabled]\n  -msmall-data-limit=N        \t\t8\n  -mstack-protector-guard-offset= \t\n  -mstack-protector-guard-reg= \t\t\n  -mstack-protector-guard=    \t\tglobal\n  -mstrict-align              \t\t[enabled]\n  -mstringop-strategy=        \t\tauto\n  -mtls-dialect=              \t\ttrad\n  -mtune=PROCESSOR            \t\t\n  -muclibc                    \t\t[disabled]\n  -mvector-strict-align       \t\t[enabled]\n  -print-supported-extensions \t\t-march=help\n\n  Supported ABIs (for use with the -mabi= option):\n    ilp32 ilp32d ilp32e ilp32f lp64 lp64d lp64e lp64f\n\n  Known code models (for use with the -mcmodel= option):\n    large medany medlow\n\n  Supported ISA specs (for use with the -misa-spec= option):\n    2.2 20190608 20191213\n\n  Known data alignment choices (for use with the -malign-data= option):\n    natural xlen\n\n  The RVV possible LMUL (-mrvv-max-lmul=):\n    conv-dynamic dynamic m1 m2 m4 m8\n\n  The possible RVV vector register lengths:\n    scalable zvl\n\n  Valid arguments to -mstack-protector-guard=:\n    global tls\n\n  Valid arguments to -mstringop-strategy=:\n    auto libcall scalar vector\n\n  The possible TLS dialects:\n    desc trad\n\n  Valid arguments to -param=vsetvl-strategy=:\n    optim optim-no-fusion simple\n\n  Known valid arguments for -mcpu= option:\n    sifive-e20 sifive-e21 sifive-e24 sifive-e31 sifive-e34 sifive-e76 sifive-s21 sifive-s51 sifive-s54 sifive-s76 sifive-u54 sifive-u74 sifive-x280 sifive-p450 sifive-p670 thead-c906 xt-c908 xt-c908v xt-c910 xt-c910v2 xt-c920 xt-c920v2 tt-ascalon-d8 xiangshan-nanhu xiangshan-kunminghu mips-p8700 andes-n22 andes-n25 andes-a25 andes-nx25 andes-ax25 andes-a27 andes-ax27 andes-n225 andes-d23 andes-n45 andes-nx45 andes-a45 andes-ax45 spacemit-x60\n\n  Known valid arguments for -mtune= option:\n    generic rocket sifive-3-series sifive-5-series sifive-7-series sifive-p400-series sifive-p600-series tt-ascalon-d8 thead-c906 xt-c908 xt-c908v xt-c910 xt-c910v2 xt-c920 xt-c920v2 xiangshan-nanhu xiangshan-kunminghu spacemit-x60 generic-ooo size mips-p8700 andes-25-series andes-23-series andes-45-series sifive-e20 sifive-e21 sifive-e24 sifive-e31 sifive-e34 sifive-e76 sifive-s21 sifive-s51 sifive-s54 sifive-s76 sifive-u54 sifive-u74 sifive-x280 sifive-p450 sifive-p670 andes-n22 andes-n25 andes-a25 andes-nx25 andes-ax25 andes-a27 andes-ax27 andes-n225 andes-d23 andes-n45 andes-nx45 andes-a45 andes-ax45\n\n"
     },
-    "jobs": 32,
-    "timeout": "2h",
-    "run_directory": "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T104917Z-5ojcjg4e",
-    "outer_repetitions": 1024,
-    "timing": "inline csrr cycle around 1024 outer repetitions, including dummy; excludes initialization and checksum; raw delta without overhead subtraction",
     "runner_returncode": null,
-    "provisional": true,
-    "collected_at": "2026-11-04T13:09:31.606425+00:00",
+    "run_directory": "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T104917Z-5ojcjg4e",
+    "staging_directory": "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T104917Z-5ojcjg4e/bin",
+    "runner_stdout": "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T104917Z-5ojcjg4e/runner.log",
+    "runner_stderr": "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T104917Z-5ojcjg4e/runner.err",
+    "outer_repetitions": 1024,
     "binary_sha256": {
       "s000": "491e91b064b235296330113b370d13c90a4f3bcaea04569d37219157797ceacf",
       "s111": "2bb4e5074de53220e778bf079d2dd608a6a6a3de3209ca0f334fe5721fab9b51",
@@ -213,14 +238,789 @@
       "vsumr": "9e3047b9e7149c87f996d3333bd20f0989030079d3f3960550fada33536942c4",
       "vdotr": "f9888f818df86392463293f66bb71cad5e0eca52de35b98144a24e4de7870bf6",
       "vbor": "f040028fd738cf5fe70dc0310f1c252baa3c054d18a89e64dd153b55fa6db7be"
-    }
+    },
+    "collected_at": "2026-11-04T13:37:10.186497+00:00",
+    "measurement_build": {
+      "manifest_sha256": "3946ddcfe791f688bfdbcda628df39c52888fe2a8b59f577029c9a798d830ce5",
+      "compiler": "riscv64-unknown-linux-gnu-gcc (g6afcc4f6d) 16.1.0",
+      "flags": [
+        "-O3",
+        "-march=rv64gcv",
+        "-mabi=lp64d",
+        "-mcmodel=medany",
+        "-ffreestanding",
+        "-fno-builtin",
+        "-fno-pie",
+        "-fno-stack-protector",
+        "-g",
+        "-I",
+        "/nfs/home/huxuan/repos/rvv-bench/autovec"
+      ],
+      "cases": [
+        {
+          "name": "s000",
+          "iterations": 1024,
+          "binary_sha256": "491e91b064b235296330113b370d13c90a4f3bcaea04569d37219157797ceacf"
+        },
+        {
+          "name": "s111",
+          "iterations": 1024,
+          "binary_sha256": "2bb4e5074de53220e778bf079d2dd608a6a6a3de3209ca0f334fe5721fab9b51"
+        },
+        {
+          "name": "s1111",
+          "iterations": 1024,
+          "binary_sha256": "052a0399f3cf4dc7d2c84fba0eb6c272402ce7e782c0bf363bc886fad304fcec"
+        },
+        {
+          "name": "s112",
+          "iterations": 1024,
+          "binary_sha256": "a03bb0b889432ee8c1574a9261bd85bae2e224a5a3c8104841a84d6ed1e3913f"
+        },
+        {
+          "name": "s1112",
+          "iterations": 1024,
+          "binary_sha256": "1b3f9d6daab646166082264ebfd9445b99faaa0e38d2e4d3addae80010bdcd74"
+        },
+        {
+          "name": "s113",
+          "iterations": 1024,
+          "binary_sha256": "cc0777e06c2eff7e6c56dc3faef623c92fe93e7d79583848e1b0ef9a4d30977d"
+        },
+        {
+          "name": "s1113",
+          "iterations": 1024,
+          "binary_sha256": "37228bcb5aee3993b807b06fdcb83765c985c677607bd81dbeb0a63c719c5a64"
+        },
+        {
+          "name": "s114",
+          "iterations": 1024,
+          "binary_sha256": "914489b61fe19c240d2b29643b91254a53ca1d90662c0b34e5f9a085ae7f4fda"
+        },
+        {
+          "name": "s115",
+          "iterations": 1024,
+          "binary_sha256": "ce02a188989701473ff8285154baa6e9c02835d5bd180233a9c89d2c71526b9e"
+        },
+        {
+          "name": "s1115",
+          "iterations": 1024,
+          "binary_sha256": "93bdbc0f2b0d2f0ca953a91af47b852e9f9f2d7f9fcde8de8ec1d7fd64941828"
+        },
+        {
+          "name": "s116",
+          "iterations": 1024,
+          "binary_sha256": "132cf888476f8d6ee79b7bedb1ac6df7e6890afc521c9bad664295de92fe4cf1"
+        },
+        {
+          "name": "s118",
+          "iterations": 1024,
+          "binary_sha256": "ed19db883afa1c289b3ff017543ed621441c8c86fe54d849633bc1e9cae31e02"
+        },
+        {
+          "name": "s119",
+          "iterations": 1024,
+          "binary_sha256": "dac080550d033711b728846f4ee052ae7fc7c59d2888fc2bb6bef03299716516"
+        },
+        {
+          "name": "s1119",
+          "iterations": 1024,
+          "binary_sha256": "4cd155594a98dd0f541182d13be022af8f0f6401a791543628b3b4727933a31a"
+        },
+        {
+          "name": "s121",
+          "iterations": 1024,
+          "binary_sha256": "c77f3046866a691e0738c30b1eeebbf1015618acda65f116b2b4b97e67867e4c"
+        },
+        {
+          "name": "s122",
+          "iterations": 1024,
+          "binary_sha256": "b59327f1db6ec4ccb519e0b5a4e09a8914570f2507c0f4c81dc454dfaf51dc50"
+        },
+        {
+          "name": "s123",
+          "iterations": 1024,
+          "binary_sha256": "996570a76cc916d7a63f42e66d2a9eb246e146a385736e25badca9b28adb4e33"
+        },
+        {
+          "name": "s124",
+          "iterations": 1024,
+          "binary_sha256": "bf892550931d15997f42a6f627581f704e41d04483eb99a7eb22706eb110c498"
+        },
+        {
+          "name": "s125",
+          "iterations": 1024,
+          "binary_sha256": "1369e240903f680b1f496352d196283088ccc0bbf87168740a0b25823b8b2382"
+        },
+        {
+          "name": "s126",
+          "iterations": 1024,
+          "binary_sha256": "d9eba866f460f6773a645590f67e5ab8b25aa8d57ed432f158c48b2422e74af6"
+        },
+        {
+          "name": "s127",
+          "iterations": 1024,
+          "binary_sha256": "bb0d0019cec89c0d1dae6d9d9a24e0c3f04d8dc312baba3b5edf9bff4757252c"
+        },
+        {
+          "name": "s128",
+          "iterations": 1024,
+          "binary_sha256": "cf428510e050836b1b539dbe25af71fce8570bdb773e5e5c096a048b57f7013d"
+        },
+        {
+          "name": "s131",
+          "iterations": 1024,
+          "binary_sha256": "850bfbe48cff721d15b9bb2fd1d8afe9114131169cbe2a81969a88221c2c0750"
+        },
+        {
+          "name": "s132",
+          "iterations": 1024,
+          "binary_sha256": "f59bd74a388dd854d578a61f1453ee09baef3015cdca9852b68a047f8452ea72"
+        },
+        {
+          "name": "s141",
+          "iterations": 1024,
+          "binary_sha256": "b5576a09460aad5e9a0fabd447cdb844f0b9ef928d97e959dd05c6243c9d1f1b"
+        },
+        {
+          "name": "s151",
+          "iterations": 1024,
+          "binary_sha256": "e767b1c745a5f0088cfcbee09d771e6e1b67a9aa0f6a1ee5ba6b76ebcb86f3a0"
+        },
+        {
+          "name": "s152",
+          "iterations": 1024,
+          "binary_sha256": "283aba728bde428420282f14e6d82edde42c614a6747527765594b8678515119"
+        },
+        {
+          "name": "s161",
+          "iterations": 1024,
+          "binary_sha256": "c7e136aacb9bd46872a759effefa7287b98e67a5bc55f78b6773d0d0c96da872"
+        },
+        {
+          "name": "s1161",
+          "iterations": 1024,
+          "binary_sha256": "8443d22eae19c53fb1ed892e22b3e99a5006406f0876024d3550445ab26d990d"
+        },
+        {
+          "name": "s162",
+          "iterations": 1024,
+          "binary_sha256": "722a7c699f07e33ecaef3883a93ee2edf6a14bc70549fb6138baf9565b43cfa1"
+        },
+        {
+          "name": "s171",
+          "iterations": 1024,
+          "binary_sha256": "8bcc144e8d01355dfa45ae3120a491f95a52966a8dbb00bfa20e5043762b474e"
+        },
+        {
+          "name": "s172",
+          "iterations": 1024,
+          "binary_sha256": "92dfa5784336f5ed1a43e9f26bb6182a46b8c84b07f38941ad19a2e889e5575c"
+        },
+        {
+          "name": "s173",
+          "iterations": 1024,
+          "binary_sha256": "74dc80846091214d875ef4c1ccfda4c9bb97ba5dd6886363a460c077b4a8ec77"
+        },
+        {
+          "name": "s174",
+          "iterations": 1024,
+          "binary_sha256": "a6ad161ea0a6c8ed8a89a8f35d1a9e11e9fdfcb2ddf9d204bf9e36d8d0eff21d"
+        },
+        {
+          "name": "s175",
+          "iterations": 1024,
+          "binary_sha256": "45b1627a74160321ddb1136524d0bbdea4ff0b3f7110f61492e3b48c9e819964"
+        },
+        {
+          "name": "s176",
+          "iterations": 1024,
+          "binary_sha256": "95722474e480c5daf403fbc33259ac6530110ee7292f858c8f17faaada464b4a"
+        },
+        {
+          "name": "s211",
+          "iterations": 1024,
+          "binary_sha256": "f6517ae13d26f7d7383b0a20aca13471cc666a65c19624ce32ed03f26c76e47b"
+        },
+        {
+          "name": "s212",
+          "iterations": 1024,
+          "binary_sha256": "e95584676ba6931cf290feb3269b89a14a97d8d3f57058b70cbcae1ffa45e8b0"
+        },
+        {
+          "name": "s1213",
+          "iterations": 1024,
+          "binary_sha256": "c8ed76983fc66e1f4f2b1ea9b6271613cfff8fcfe9f093fb35b6a38d53bd3f06"
+        },
+        {
+          "name": "s221",
+          "iterations": 1024,
+          "binary_sha256": "df32893d971318c8a6db03e3b620d4028b1ed850155a4143e8bcf353e7f3e4af"
+        },
+        {
+          "name": "s1221",
+          "iterations": 1024,
+          "binary_sha256": "1a986ff55851c347b5fad3c7378cb230509e3ba0fff02142805c279d8a6c0fb4"
+        },
+        {
+          "name": "s222",
+          "iterations": 1024,
+          "binary_sha256": "9edeb44182412be055e67cd468247d946266c4ab2615b3cdfbfff99ba3ce66fb"
+        },
+        {
+          "name": "s231",
+          "iterations": 1024,
+          "binary_sha256": "04a961c102c22cd8c3e6e06f333059d314b9625cdb6609afee93eec78f43ac15"
+        },
+        {
+          "name": "s232",
+          "iterations": 1024,
+          "binary_sha256": "698969bdec0b8696638b7d4dcd69f03e13456725cc68e54e63c8f608de81486b"
+        },
+        {
+          "name": "s1232",
+          "iterations": 1024,
+          "binary_sha256": "14a58ee6a5d9ed758218c2215f2385b0c88d97bb0f1c6509a2d4d70042781b45"
+        },
+        {
+          "name": "s233",
+          "iterations": 1024,
+          "binary_sha256": "505681d1468401c3c4cf190ef43fcbb423379f4ad057525a50687bc446f15f0c"
+        },
+        {
+          "name": "s2233",
+          "iterations": 1024,
+          "binary_sha256": "3e7831f996f8603c2724ffe61771f45487cb5131d9f528cbd11bd3c932d18303"
+        },
+        {
+          "name": "s235",
+          "iterations": 1024,
+          "binary_sha256": "e3879d0ae291da4b528b7514b3a74135e256f14be3e890a215e31e7160f6b59a"
+        },
+        {
+          "name": "s241",
+          "iterations": 1024,
+          "binary_sha256": "fcff364648701bfa17747d1fa8cc053cf2033d659501558e6de4770447d538f4"
+        },
+        {
+          "name": "s242",
+          "iterations": 1024,
+          "binary_sha256": "98c0fbcd3f1ad96be15c1049d187aedf53637f35b3a9c79f3580fb4eb8c6df3e"
+        },
+        {
+          "name": "s243",
+          "iterations": 1024,
+          "binary_sha256": "6038e4f57a680924832b8aaf6d70f975a8da0f77f66bfef9ace417d3fb8cfd25"
+        },
+        {
+          "name": "s244",
+          "iterations": 1024,
+          "binary_sha256": "4ed02c15c949fb0129bb9b2fdf651e8668ec29dd2535a2178c0056d0111637ec"
+        },
+        {
+          "name": "s1244",
+          "iterations": 1024,
+          "binary_sha256": "29bd1dbeabad5e09a47f37a3ca463e08ae9a088e7b7e93b36ba1bd3fefa0c810"
+        },
+        {
+          "name": "s2244",
+          "iterations": 1024,
+          "binary_sha256": "004848e4d4d69cf0d41642d382af3b20175528ab7d8f6183a36224364243c29a"
+        },
+        {
+          "name": "s251",
+          "iterations": 1024,
+          "binary_sha256": "c79df55e818182a5bf14afac5fe392e264443bfd691d8de24a96e34d6db08aaa"
+        },
+        {
+          "name": "s1251",
+          "iterations": 1024,
+          "binary_sha256": "9513510815cc7d8a035fb2f0174eeecfab9f064eeef869129061825549bfd91e"
+        },
+        {
+          "name": "s2251",
+          "iterations": 1024,
+          "binary_sha256": "f71bb004b77c4fb67806f88972bd708bcca4541e36e99bb8ec85fb5ed5dafdea"
+        },
+        {
+          "name": "s3251",
+          "iterations": 1024,
+          "binary_sha256": "baef8238722fb8ca4d2804cb8a890871a9279f59275dd2f67ae335f5f77c06f5"
+        },
+        {
+          "name": "s252",
+          "iterations": 1024,
+          "binary_sha256": "261f7f4a27840580413db96eadd78f7112ffeffd78e789fb88c91936f63f379f"
+        },
+        {
+          "name": "s253",
+          "iterations": 1024,
+          "binary_sha256": "a5b324d5964369c352eef5c02ff896954c091b62864e40049381dcf4dc81c93b"
+        },
+        {
+          "name": "s254",
+          "iterations": 1024,
+          "binary_sha256": "1a951cd02df338a44d0fe7276c9c0f0438a5c8ceab1fef15c47cc84ac44a8e66"
+        },
+        {
+          "name": "s255",
+          "iterations": 1024,
+          "binary_sha256": "05489c2497ae47ad2764116f748fd6555d42e8f0e313b39bf10ddf73b6888f12"
+        },
+        {
+          "name": "s256",
+          "iterations": 1024,
+          "binary_sha256": "d24d0ecdebff9253e5c1d32febaaaece6a90f828672a10d3bd763cc42c574bd9"
+        },
+        {
+          "name": "s257",
+          "iterations": 1024,
+          "binary_sha256": "763eee30feb7545f9736618fc12cd603f875e1e400562c514be8b2b2ddc12c60"
+        },
+        {
+          "name": "s258",
+          "iterations": 1024,
+          "binary_sha256": "f0500a2b7cc2fdf17ecc023be2a1f6dd4795b40bd37240b6c9f63f5a661a62dc"
+        },
+        {
+          "name": "s261",
+          "iterations": 1024,
+          "binary_sha256": "e71c4d086263e8243012c66e2debb21bd72cfb12427e9967021219912be18ee4"
+        },
+        {
+          "name": "s271",
+          "iterations": 1024,
+          "binary_sha256": "af72ca50e206a05c68d982b282d21eb4ac39707b51187625dccb2eaadd8590ce"
+        },
+        {
+          "name": "s272",
+          "iterations": 1024,
+          "binary_sha256": "79177310fa7b448ab19bef3d82f8a47079a1c462cd50e7eccf9940f7cbc1c718"
+        },
+        {
+          "name": "s273",
+          "iterations": 1024,
+          "binary_sha256": "f20fd18396303ae072825b75e7ed2edf28e038f577e597b9a8c98d5181063d19"
+        },
+        {
+          "name": "s274",
+          "iterations": 1024,
+          "binary_sha256": "d7fc4ef1840cf1a1c6b94e336683ebcd61cc7c894fc4c31f3eaff9a1876ecc5e"
+        },
+        {
+          "name": "s275",
+          "iterations": 1024,
+          "binary_sha256": "ded36adffd185a67812407d3c3ad25eee540f91441d24f454636e4f8a3b47903"
+        },
+        {
+          "name": "s2275",
+          "iterations": 1024,
+          "binary_sha256": "17c329212198f689df7a33b3143557bff8eaad3b36823a6e1bf619d3f8130d74"
+        },
+        {
+          "name": "s276",
+          "iterations": 1024,
+          "binary_sha256": "5daf8319fbd4a571ef14fabe4f70c89882281c6dc2e746541f6dd3940b7940ad"
+        },
+        {
+          "name": "s277",
+          "iterations": 1024,
+          "binary_sha256": "d553b3b5cff820db31cdb390cf9ba250a3d509ced5b1f8036c4e81a6a82f4b2b"
+        },
+        {
+          "name": "s278",
+          "iterations": 1024,
+          "binary_sha256": "f45f6294eefc08357aa6cbb0c2ca98a1f56ee8c3291bc5f01f13ebad552e2c5d"
+        },
+        {
+          "name": "s279",
+          "iterations": 1024,
+          "binary_sha256": "a5a17cbd87de27b5a11cabccb48d97c23015e86e64d1954f118ea6752e694a90"
+        },
+        {
+          "name": "s1279",
+          "iterations": 1024,
+          "binary_sha256": "109e01bc1bfc108175a651f6e632feab0192c72ac55d3deec1553bd6daeeb2d7"
+        },
+        {
+          "name": "s2710",
+          "iterations": 1024,
+          "binary_sha256": "34a4a18272369f4611cbe3cbf42579b3b49d0d7b59d715120d07efa2a6abb9bd"
+        },
+        {
+          "name": "s2711",
+          "iterations": 1024,
+          "binary_sha256": "788850c180fc1de2bd9cc4e9d57541e32bfdc075e7f4e163bfa4c478ffedcb06"
+        },
+        {
+          "name": "s2712",
+          "iterations": 1024,
+          "binary_sha256": "493e38dc0d464cdfc14b8b9576e0ea97501d769d3829d3cb49ff9fddf912cf8d"
+        },
+        {
+          "name": "s281",
+          "iterations": 1024,
+          "binary_sha256": "056789951a7aa93784a01d8c14a7f4509a1f85173b219cec45148861e8d957ff"
+        },
+        {
+          "name": "s1281",
+          "iterations": 1024,
+          "binary_sha256": "6a9feadbb5cfe30722387dda288c1aff8d93f76281df1c19cbdc0d0460d332c1"
+        },
+        {
+          "name": "s291",
+          "iterations": 1024,
+          "binary_sha256": "7d0f5132456615b8f6ce013c3dfc152d2c1aa8d015f5098a2523ebfb404b32d1"
+        },
+        {
+          "name": "s292",
+          "iterations": 1024,
+          "binary_sha256": "f716ba4e43df78d22371046bb9a2c9d3dc47f632ecd52fcdd2abc817a1873740"
+        },
+        {
+          "name": "s293",
+          "iterations": 1024,
+          "binary_sha256": "eecd7d65a192a721b63a67e9b99b4f6bf273294059365becc5332536b99dd0c1"
+        },
+        {
+          "name": "s2101",
+          "iterations": 1024,
+          "binary_sha256": "401d89348c242121021f260682748abf818d8cf8bf1e5614cb8411b0c290d647"
+        },
+        {
+          "name": "s2102",
+          "iterations": 1024,
+          "binary_sha256": "2f8a7e36d8672a429736881af4f21c9ac6385f5773c1dcc1938749de99a059ae"
+        },
+        {
+          "name": "s2111",
+          "iterations": 1024,
+          "binary_sha256": "690658646a6cf6e1ec383730fe34403001ff9fc726f969c14e98014713bae50b"
+        },
+        {
+          "name": "s311",
+          "iterations": 1024,
+          "binary_sha256": "f82aff5562a9934164386c32bb01d09749b51ffb519061b0c4cca1bfae7d2aef"
+        },
+        {
+          "name": "s31111",
+          "iterations": 1024,
+          "binary_sha256": "b8bc3bfb4688f37f8cd8ce795bf5fb52d361650c52fb792448f9edb69a96653e"
+        },
+        {
+          "name": "s312",
+          "iterations": 1024,
+          "binary_sha256": "5461a248cd196aef9fdc434b79e4a573e9eb07e48899e870ff6d276aa9ad1004"
+        },
+        {
+          "name": "s313",
+          "iterations": 1024,
+          "binary_sha256": "cdeaec734da0d954d7a4157350801ac78553849c1b43b70ff3eff4585486ec3e"
+        },
+        {
+          "name": "s314",
+          "iterations": 1024,
+          "binary_sha256": "ed126bebf9dfbcfadde4edec26dcf2b156d1f88c36b6c39a99e9c1108e610187"
+        },
+        {
+          "name": "s315",
+          "iterations": 1024,
+          "binary_sha256": "206bfdf1c6d29ad902f6ddf3755e23b05613d9f6654b2d0632d8615d5a6f1cd7"
+        },
+        {
+          "name": "s316",
+          "iterations": 1024,
+          "binary_sha256": "595184cc058b81df4d1746960eb9a75477d7946742e6336252a75973b371f5a2"
+        },
+        {
+          "name": "s317",
+          "iterations": 1024,
+          "binary_sha256": "fc6498830f25cf3b0d5729e2eda3166843a9e3340bbcb7c59e44ad06726f541a"
+        },
+        {
+          "name": "s318",
+          "iterations": 1024,
+          "binary_sha256": "c6c0004789bf8ad414608d2be997b229806fa44e7864efd3ed6cef67f9ef59bf"
+        },
+        {
+          "name": "s319",
+          "iterations": 1024,
+          "binary_sha256": "8c3e71fb9100d2721216a8b1a3c54f43b6ddd4ad67b07e06696d751a36aec24d"
+        },
+        {
+          "name": "s3110",
+          "iterations": 1024,
+          "binary_sha256": "b8636fdcb53d8e0976202aab53d2f1180bc15160930abc5be6737e79363cb8fb"
+        },
+        {
+          "name": "s13110",
+          "iterations": 1024,
+          "binary_sha256": "1658cf6358647cc15a2cedb322bcafc40d3fd9fcc6fefd5efd97b56563ef97ec"
+        },
+        {
+          "name": "s3111",
+          "iterations": 1024,
+          "binary_sha256": "ee0c42118f46037fc8ec01d1bfea6d41eb39f93077d3e16985fe15f49e96de35"
+        },
+        {
+          "name": "s3112",
+          "iterations": 1024,
+          "binary_sha256": "5fcf835fcb2a60bc94359a19a9be994fcca75c15f002993286bde349d18f9f5b"
+        },
+        {
+          "name": "s3113",
+          "iterations": 1024,
+          "binary_sha256": "f3e55ea7edc06bef3e17f45dc823dc7133ddbfa6242d561f65dcb17e1bb2c17b"
+        },
+        {
+          "name": "s321",
+          "iterations": 1024,
+          "binary_sha256": "ce0faf7eddc7d4553a3ec3e39908dd8191bddf939b688521c3a1b81a22c11bcb"
+        },
+        {
+          "name": "s322",
+          "iterations": 1024,
+          "binary_sha256": "1df49dea11a1cc366b3902b1a52f3b87d90517ea6f0ff0819c52207781bc5c43"
+        },
+        {
+          "name": "s323",
+          "iterations": 1024,
+          "binary_sha256": "e58f0d2407e4e911057379815e3b3eabf8de0565024592fe70b8f48ed7c587bb"
+        },
+        {
+          "name": "s331",
+          "iterations": 1024,
+          "binary_sha256": "74d0b5d2dc40fab35520d2a89c13876b763321d5d0c96b8a65b895fe7672f8bd"
+        },
+        {
+          "name": "s332",
+          "iterations": 1024,
+          "binary_sha256": "df6ada3a5ee47c4670c883318eec7f182f121478a588d8cfa31aec9ae3b9ed9b"
+        },
+        {
+          "name": "s341",
+          "iterations": 1024,
+          "binary_sha256": "7155c0339378897f0467bfba51349d2d8a38b58f5a17123b9065183b0632c667"
+        },
+        {
+          "name": "s342",
+          "iterations": 1024,
+          "binary_sha256": "dae24a7debc0dd8d44e212e748c088ce7f4f8242c302876f40ead42504997338"
+        },
+        {
+          "name": "s343",
+          "iterations": 1024,
+          "binary_sha256": "e1cc83291ba512dd147ad3b7c6acab0e2deb7dc0af5c56a9c9fbd3170ee84417"
+        },
+        {
+          "name": "s351",
+          "iterations": 1024,
+          "binary_sha256": "daecb435d05e64ea110dd879aaf731400b0295984767e0b78e6443e4e7392afd"
+        },
+        {
+          "name": "s1351",
+          "iterations": 1024,
+          "binary_sha256": "b9fb3ad771e2d307eea9c31277139bc92c351c826313ee15a2966a2cf80cfce0"
+        },
+        {
+          "name": "s352",
+          "iterations": 1024,
+          "binary_sha256": "ffa0f23a259681b0d136e6a89ba547eacea1e5aafb6ed1de750f6135c4bf456b"
+        },
+        {
+          "name": "s353",
+          "iterations": 1024,
+          "binary_sha256": "8c20af7c6215dd3da808261391084ccd33655c0fd49e39b9daa1b12b7022c2f9"
+        },
+        {
+          "name": "s421",
+          "iterations": 1024,
+          "binary_sha256": "73d0ffd5eb450f4d62ab38c7b669a32fac4ad6b0aaa137384130dd6446b39e49"
+        },
+        {
+          "name": "s1421",
+          "iterations": 1024,
+          "binary_sha256": "07a47462adcd2a8cdb32bed9124cea70ea0daf9881323aed018abe127704bbc0"
+        },
+        {
+          "name": "s422",
+          "iterations": 1024,
+          "binary_sha256": "b115c253327e69790c9d96e93c25864e8b13aad23a94c0e32945b0b51c04eada"
+        },
+        {
+          "name": "s423",
+          "iterations": 1024,
+          "binary_sha256": "f1a8ec7b726e9402719fd660d8af9246ddc9ba7d4b2cf370aa20a8d374d684ce"
+        },
+        {
+          "name": "s424",
+          "iterations": 1024,
+          "binary_sha256": "82cb7ec36289ce0220870a4ca6534ce111671fdf9bdd4a5b338683b526a0f418"
+        },
+        {
+          "name": "s431",
+          "iterations": 1024,
+          "binary_sha256": "03a3e1fa841e043ffc0dbce36a78daa24b678caaa4f098134975ca9f22a9efe5"
+        },
+        {
+          "name": "s441",
+          "iterations": 1024,
+          "binary_sha256": "03ba63284e808c6a4c9553326aabc9077b7ca2c53fe9f3fa801ed153b839a493"
+        },
+        {
+          "name": "s442",
+          "iterations": 1024,
+          "binary_sha256": "7809204982a2a574fc6c10cb18d97058f220e74926584afc8fe9cc0ee5335239"
+        },
+        {
+          "name": "s443",
+          "iterations": 1024,
+          "binary_sha256": "22b437ac161cbb34a58fb13dd30b65c138eda2ac5fdc81e5532be3092e339de7"
+        },
+        {
+          "name": "s451",
+          "iterations": 1024,
+          "binary_sha256": "81bacea97f3bf92cc1be8289c741de0fadc13ecdb4a9852fa058abcdee3c2d3c"
+        },
+        {
+          "name": "s452",
+          "iterations": 1024,
+          "binary_sha256": "6b9d2bd01ac85766ce110dba84dbdca6e5c1827f697e22adce5e266a86af41f3"
+        },
+        {
+          "name": "s453",
+          "iterations": 1024,
+          "binary_sha256": "53d7eb38bf8ece81f5c53b457ac25afc65816197895b602e7d8f139b5334ed30"
+        },
+        {
+          "name": "s471",
+          "iterations": 1024,
+          "binary_sha256": "70c4b0b4c4829dd426ba1f59fe9aad56cf3700cd16412a72a0f4b7d598705d5a"
+        },
+        {
+          "name": "s481",
+          "iterations": 1024,
+          "binary_sha256": "f5426300d2fdbf968cdde28488bb9e4382a1ae6dde9eb0e20ab1c49c82d8a840"
+        },
+        {
+          "name": "s482",
+          "iterations": 1024,
+          "binary_sha256": "e628c00e8463fe36dab33799591ae1297e2e8eaabad31a8e64500226d7779359"
+        },
+        {
+          "name": "s491",
+          "iterations": 1024,
+          "binary_sha256": "a66ed54094afc39ca010569df5adae15533ba30190f7070ede9b777c93ba0a53"
+        },
+        {
+          "name": "s4112",
+          "iterations": 1024,
+          "binary_sha256": "b95118c5e1b48903c9dfd248e22f55cedbcb7e8f40ece1fd79c00f73ae2dd36d"
+        },
+        {
+          "name": "s4113",
+          "iterations": 1024,
+          "binary_sha256": "972679ad731c2eb2d3c8fbb2829fb08ee0a1e1d9b68747a71ea5f8acf55bd739"
+        },
+        {
+          "name": "s4114",
+          "iterations": 1024,
+          "binary_sha256": "2ee835462829910a81ee9fb2c23db626ef162e1f3aa3211accf212a1795ff436"
+        },
+        {
+          "name": "s4115",
+          "iterations": 1024,
+          "binary_sha256": "04f0be7bb46cad0a566d8a78af3c1737d424fe96364b1ce8c0b92b2888a7e78f"
+        },
+        {
+          "name": "s4116",
+          "iterations": 1024,
+          "binary_sha256": "2e8bf4db565ff884c0aac22ca99beae84e0d24da5fd29904635975d2ad6f1977"
+        },
+        {
+          "name": "s4117",
+          "iterations": 1024,
+          "binary_sha256": "8662275f3891b4d4061b56c3e15b4d99d6e692573f1bc2305b1abe341ef6343d"
+        },
+        {
+          "name": "s4121",
+          "iterations": 1024,
+          "binary_sha256": "1b6039f21245edfbae9861173b1cbf39518cd4cfa687c31efeb1b562d63c4768"
+        },
+        {
+          "name": "va",
+          "iterations": 1024,
+          "binary_sha256": "5680edb04e277697791e2e30fe6ab4f9450426b35d2bd8a93f57554f81e7f100"
+        },
+        {
+          "name": "vag",
+          "iterations": 1024,
+          "binary_sha256": "66df20faa3dff83e95ca03a773112d5854aa7ceae2c0d27650921c43dbb78787"
+        },
+        {
+          "name": "vas",
+          "iterations": 1024,
+          "binary_sha256": "1147e469d849f2e1ced6661c8a8b80b445190f7e2d08f0408fe69ebf2d0a4886"
+        },
+        {
+          "name": "vif",
+          "iterations": 1024,
+          "binary_sha256": "e07c3abc771b02586cfcc9bb716eda423656c830548937f49102bb9105882b4d"
+        },
+        {
+          "name": "vpv",
+          "iterations": 1024,
+          "binary_sha256": "6c8902bb72a210576ef0548aa63b32fd2d2beb32f1b0083f91ecf0540dc1019b"
+        },
+        {
+          "name": "vtv",
+          "iterations": 1024,
+          "binary_sha256": "965cac7bc99e6f004f91f2124ab7aa005eb81cad2f2eede4eda271af395f0fb3"
+        },
+        {
+          "name": "vpvtv",
+          "iterations": 1024,
+          "binary_sha256": "9ae5415d04c15c6a752d016856f57665c6ec1acfe462fd9aa959ec8e7930b2af"
+        },
+        {
+          "name": "vpvts",
+          "iterations": 1024,
+          "binary_sha256": "18a15598c6dea6af1e8c62ef1da7085eae427e9b868cfb18fb6f153f325075ef"
+        },
+        {
+          "name": "vpvpv",
+          "iterations": 1024,
+          "binary_sha256": "b26cb8016bc5909e672b5ab8676f395f3d1f8017311c460f0a4586ee7ca9c24e"
+        },
+        {
+          "name": "vtvtv",
+          "iterations": 1024,
+          "binary_sha256": "8c0ee108216f8c780751da56ea4f4162e654f11b3c420de392f42112de8575a8"
+        },
+        {
+          "name": "vsumr",
+          "iterations": 1024,
+          "binary_sha256": "9e3047b9e7149c87f996d3333bd20f0989030079d3f3960550fada33536942c4"
+        },
+        {
+          "name": "vdotr",
+          "iterations": 1024,
+          "binary_sha256": "f9888f818df86392463293f66bb71cad5e0eca52de35b98144a24e4de7870bf6"
+        },
+        {
+          "name": "vbor",
+          "iterations": 1024,
+          "binary_sha256": "f040028fd738cf5fe70dc0310f1c252baa3c054d18a89e64dd153b55fa6db7be"
+        }
+      ]
+    },
+    "finished_at": "2026-11-04 21:35:39"
   },
   "summary": {
     "cases": 151,
     "statuses": {
       "passed": 148,
-      "timeout": 2,
-      "running-or-queued": 1
+      "timeout": 3
     },
     "passed_total_cycles": 132228011,
     "passed_cycles_per_outer_repetition": 129128.9169921875
@@ -2461,8 +3261,8 @@
     {
       "suite": "tsvc",
       "name": "s451",
-      "status": "running-or-queued",
-      "reason": "batch still in progress",
+      "status": "timeout",
+      "reason": "runner or log reports timeout",
       "total_cycles": null,
       "cycles_per_outer_repetition": null,
       "outer_repetitions": 1024,
