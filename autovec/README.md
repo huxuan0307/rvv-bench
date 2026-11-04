@@ -54,6 +54,8 @@ python3 autovec/build.py --suite tsvc --jobs 16
 python3 autovec/run_gsim.py --jobs 32 --timeout 2h
 # 仅测一项
 python3 autovec/run_gsim.py --case s000 --jobs 1
+# 从已有完整运行日志重新汇总，不启动模拟器
+python3 autovec/run_gsim.py --collect-run autovec/build/gsim-1024/<run-id>
 ```
 
 生成内核在原始计时边界内联两条 `csrr ..., cycle`，附带编译器 memory barrier；初始化和 checksum 在计时区间外，区间包含 1024 次外层重复、内层循环、dummy 调用及循环控制。未减去 CSR 读数开销，也未插入硬件 fence；结果是该代码区间的 CSR 周期差，不保证最后一次 store 已写回外部内存。输出 `AV cycles=... checksum=... iterations=1024`；`cycles/1024` 表示一次完整外层重复的平均周期，不是单个内层元素或一条 RVV 指令的吞吐。

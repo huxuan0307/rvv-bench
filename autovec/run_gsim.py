@@ -138,7 +138,8 @@ def write_reports(directory, metadata, rows):
              f"Passed cases total cycles: {summary['passed_total_cycles']}; "
              f"sum of cycles / 1024: {summary['passed_cycles_per_outer_repetition']}", '',
              'Cycles are the AV driver total divided by 1024 outer repetitions; '
-             'they are not cycles per inner kernel iteration.', '',
+             'they are not cycles per inner kernel iteration. The raw interval includes dummy calls and CSR read overhead; initialization and checksum are outside. No hardware fence or warmup is added.', '',
+              'Nonfinite checksum values (inf/NaN) indicate overflow or invalid arithmetic in the repeated workload; passing difftest does not establish a finite numerical result.', '',
              '| Case | Status | Total cycles | Cycles / 1024 | Checksum | Reason | Logs |',
              '| --- | --- | ---: | ---: | --- | --- | --- |']
     for row in rows:
@@ -153,11 +154,92 @@ def write_reports(directory, metadata, rows):
     return counts
 
 
+def collect_run(run, manifest_path, manifest, manifest_bytes, cases):
+    """Recover original run provenance; never invoke a runner or modify logs."""
+    run = run.resolve()
+    base = (ROOT / 'build/gsim-1024').resolve()
+    if base not in run.parents or not run.is_dir() or not (run / 'logs').is_dir():
+        raise ValueError('--collect-run must name a run directory under build/gsim-1024')
+    recorded_path = run / 'run-metadata.json'
+    metadata = json.loads(recorded_path.read_text()) if recorded_path.is_file() else {}
+    snapshot_path = run / 'measurement-build.json'
+    snapshot = json.loads(snapshot_path.read_text()) if snapshot_path.is_file() else {}
+    digest = hashlib.sha256(manifest_bytes).hexdigest()
+    expected = metadata.get('manifest_sha256', snapshot.get('manifest_sha256'))
+    if expected and expected != digest:
+        raise ValueError('manifest hash differs from the recorded measurement build')
+    staged = {p.stem for p in (run / 'bin').glob('*.bin')}
+    if not staged or not {c['name'] for c in cases}.issubset(staged):
+        raise ValueError('selected manifest cases do not match the staged run; use --case for a smoke run')
+    hashes = metadata.get('binary_sha256') or {
+        c['name']: c['binary_sha256'] for c in snapshot.get('cases', [])}
+    for case in cases:
+        staged_binary = run / 'bin' / (case['name'] + '.bin')
+        if staged_binary.resolve() != case['_binary']:
+            raise ValueError(f"{case['name']}: staged binary differs from manifest")
+        if case['name'] in hashes and hashlib.sha256(staged_binary.read_bytes()).hexdigest() != hashes[case['name']]:
+            raise ValueError(f"{case['name']}: binary hash differs from measurement build")
+    runner_log = run / 'runner.log'
+    text = runner_log.read_text(errors='replace')
+    def header(key):
+        match = re.search(r'^\s*' + re.escape(key) + r':\s*(.*?)\s*$', text, re.M)
+        if not match:
+            raise ValueError(f'cannot recover {key} from runner.log')
+        return match[1]
+    if not metadata:
+        emulator = Path(header('emu'))
+        ref_match = re.fullmatch(r'ON\s+\((.*)\)', header('diff'))
+        if not ref_match:
+            raise ValueError('recorded run does not enable a diff reference')
+        reference = Path(ref_match[1])
+        command = [str(RUNNER), '-e', str(emulator), '-r', str(reference),
+                   '-t', str(run / 'bin'), '-j', header('parallel'),
+                   '--timeout', header('timeout'), '-o', str(run / 'logs')]
+        metadata = {'started_at': header('started'),
+                    'started_at_source': 'runner.log (runner local time)',
+                    'manifest': str(manifest_path), 'manifest_sha256': digest,
+                    'emulator': identity(emulator), 'reference': identity(reference),
+                    'runner': identity(RUNNER), 'jobs': int(header('parallel')),
+                    'timeout': header('timeout'), 'command': command,
+                    'identity_observation': 'file identities observed at collection; paths recovered from runner.log',
+                    'build': {k: v for k, v in manifest.items() if k != 'cases'},
+                    'runner_returncode': None}
+    metadata.setdefault('manifest', str(manifest_path))
+    metadata.setdefault('manifest_sha256', digest)
+    metadata.update(run_directory=str(run), staging_directory=str(run / 'bin'),
+                    runner_stdout=str(runner_log), runner_stderr=str(run / 'runner.err'),
+                    outer_repetitions=REPETITIONS, binary_sha256=hashes,
+                    collected_at=datetime.now(timezone.utc).isoformat())
+    if snapshot:
+        metadata['measurement_build'] = snapshot
+    finished = re.search(r'^\s*finished:\s*(.*?)\s*$', text, re.M)
+    if not finished and not metadata.get('finished_at'):
+        raise ValueError('batch is still running: collect after runner prints its final summary')
+    if finished and 'finished_at' not in metadata:
+        metadata['finished_at'] = finished[1]
+    return run / 'logs', metadata
+
+
+def finish_reports(logs, metadata, cases):
+    lists = {kind: set() for kind in ('pass', 'fail', 'timeout')}
+    for kind in lists:
+        for path in logs.rglob(f'.{kind}_list'):
+            lists[kind].update(path.read_text(errors='replace').splitlines())
+    rows = [parse_case(case, logs, lists) for case in cases]
+    reports = ROOT / 'reports/tsvc-gsim-1024'
+    counts = write_reports(reports, metadata, rows)
+    print(f'Reports: {reports}; {json.dumps(counts, sort_keys=True)}', flush=True)
+    return int(any(row['status'] != 'passed' for row in rows)
+               or metadata['runner_returncode'] not in (None, 0))
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--manifest', type=Path, default=ROOT / 'build/O3/manifest.json')
-    parser.add_argument('--case', help='run exactly one TSVC manifest case (smoke test)')
+    parser.add_argument('--case', help='run or collect exactly one TSVC manifest case (smoke test)')
+    parser.add_argument('--collect-run', type=Path,
+                        help='collect existing build/gsim-1024 run logs without launching emulators')
     parser.add_argument('--jobs', type=int, default=32, help='runner concurrency: 1..64 (default: 32)')
     parser.add_argument('--timeout', default='2h', help='positive GNU timeout duration per case (default: 2h)')
     args = parser.parse_args(argv)
@@ -186,7 +268,11 @@ def main(argv=None):
         directory = Path(case['directory'])
         if not directory.is_absolute():
             directory = manifest_path.parent / directory
+        case['directory'] = str(directory.resolve())
         case['_binary'] = (directory / f'{name}.bin').resolve()
+    if args.collect_run is not None:
+        logs, metadata = collect_run(args.collect_run, manifest_path, manifest, manifest_bytes, cases)
+        return finish_reports(logs, metadata, cases)
     for path in (RUNNER, REF):
         if not path.is_file():
             parser.error(f'required file is missing: {path}')
@@ -221,6 +307,7 @@ def main(argv=None):
                 'runner_stdout': str(run / 'runner.log'),
                 'runner_stderr': str(run / 'runner.err'), 'command': command,
                 'runner_returncode': None}
+    (run / 'run-metadata.json').write_text(json.dumps(metadata, indent=2) + '\n')
     print(f'Logs: {run}', flush=True)
     if runnable:
         print(shlex.join(command), flush=True)
@@ -231,17 +318,9 @@ def main(argv=None):
             except OSError as exc:
                 metadata['runner_error'] = str(exc)
                 stderr.write(str(exc) + '\n')
-    lists = {kind: set() for kind in ('pass', 'fail', 'timeout')}
-    for kind in lists:
-        for path in logs.rglob(f'.{kind}_list'):
-            lists[kind].update(path.read_text(errors='replace').splitlines())
-    rows = [parse_case(case, logs, lists) for case in cases]
     metadata['finished_at'] = datetime.now(timezone.utc).isoformat()
-    reports = ROOT / 'reports/tsvc-gsim-1024'
-    counts = write_reports(reports, metadata, rows)
-    print(f'Reports: {reports}; {json.dumps(counts, sort_keys=True)}', flush=True)
-    return int(any(row['status'] != 'passed' for row in rows)
-               or metadata['runner_returncode'] not in (None, 0))
+    (run / 'run-metadata.json').write_text(json.dumps(metadata, indent=2) + '\n')
+    return finish_reports(logs, metadata, cases)
 
 
 if __name__ == '__main__':
