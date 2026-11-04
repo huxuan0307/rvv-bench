@@ -57,7 +57,7 @@ The latest successful attempt wins over retries; if none succeeded, the latest f
 | tsvc/s173 | 88748 |
 | tsvc/s174 | 88012 |
 | tsvc/s175 | 181367 |
-| tsvc/s176 |  |
+| tsvc/s176 | 8340105 |
 | tsvc/s2101 | 68621 |
 | tsvc/s2102 | 1151264 |
 | tsvc/s211 | 627778 |

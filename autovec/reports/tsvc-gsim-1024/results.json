@@ -1,10 +1,10 @@
 {
   "metadata": {
     "binary_sha256": {
-      "s451": "81bacea97f3bf92cc1be8289c741de0fadc13ecdb4a9852fa058abcdee3c2d3c"
+      "s176": "95722474e480c5daf403fbc33259ac6530110ee7292f858c8f17faaada464b4a"
     },
     "timing": "inline csrr cycle around 1024 outer repetitions, including dummy; excludes initialization and checksum; raw delta without overhead subtraction",
-    "started_at": "2026-11-04T13:37:46.036089+00:00",
+    "started_at": "2026-11-04T12:54:56.288481+00:00",
     "manifest": "/nfs/home/huxuan/repos/rvv-bench/autovec/build/O3/manifest.json",
     "manifest_sha256": "3946ddcfe791f688bfdbcda628df39c52888fe2a8b59f577029c9a798d830ce5",
     "emulator": {
@@ -67,10 +67,10 @@
     "jobs": 1,
     "timeout": "0",
     "outer_repetitions": 1024,
-    "run_directory": "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T133746Z-3ojg3ajr",
-    "staging_directory": "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T133746Z-3ojg3ajr/bin",
-    "runner_stdout": "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T133746Z-3ojg3ajr/runner.log",
-    "runner_stderr": "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T133746Z-3ojg3ajr/runner.err",
+    "run_directory": "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T125456Z-y86vei0a",
+    "staging_directory": "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T125456Z-y86vei0a/bin",
+    "runner_stdout": "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T125456Z-y86vei0a/runner.log",
+    "runner_stderr": "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T125456Z-y86vei0a/runner.err",
     "command": [
       "/nfs/home/huxuan/opt/bin/run_emu.sh",
       "-e",
@@ -78,43 +78,43 @@
       "-r",
       "/nfs/share/huxuan/riscv64-nemu-interpreter-so-fixvfredusum",
       "-t",
-      "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T133746Z-3ojg3ajr/bin",
+      "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T125456Z-y86vei0a/bin",
       "-j",
       "1",
       "--timeout",
       "0",
       "-o",
-      "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T133746Z-3ojg3ajr/logs"
+      "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T125456Z-y86vei0a/logs"
     ],
     "runner_returncode": 0,
-    "finished_at": "2026-11-04T15:33:42.557280+00:00",
-    "collected_at": "2026-11-04T15:33:50.887660+00:00"
+    "finished_at": "2026-11-04T16:34:43.270114+00:00",
+    "collected_at": "2026-11-04T16:34:54.799630+00:00"
   },
   "summary": {
     "cases": 1,
     "statuses": {
       "passed": 1
     },
-    "passed_total_cycles": 9103290,
-    "passed_cycles_per_outer_repetition": 8889.931640625
+    "passed_total_cycles": 8340105,
+    "passed_cycles_per_outer_repetition": 8144.6337890625
   },
   "results": [
     {
       "suite": "tsvc",
-      "name": "s451",
+      "name": "s176",
       "status": "passed",
       "reason": "",
-      "total_cycles": 9103290,
-      "cycles_per_outer_repetition": 8889.931640625,
+      "total_cycles": 8340105,
+      "cycles_per_outer_repetition": 8144.6337890625,
       "outer_repetitions": 1024,
-      "checksum": "325.377991",
+      "checksum": "5407.49463",
       "build_status": "built",
-      "binary": "/nfs/home/huxuan/repos/rvv-bench/autovec/build/O3/tsvc/s451/s451.bin",
+      "binary": "/nfs/home/huxuan/repos/rvv-bench/autovec/build/O3/tsvc/s176/s176.bin",
       "stdout_logs": [
-        "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T133746Z-3ojg3ajr/logs/20261104-213746/run-s451.log"
+        "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T125456Z-y86vei0a/logs/20261104-205456/run-s176.log"
       ],
       "stderr_logs": [
-        "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T133746Z-3ojg3ajr/logs/20261104-213746/run-s451.err"
+        "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T125456Z-y86vei0a/logs/20261104-205456/run-s176.err"
       ]
     }
   ]
