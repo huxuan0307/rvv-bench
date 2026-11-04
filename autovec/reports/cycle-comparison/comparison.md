@@ -61,7 +61,7 @@ The latest successful attempt wins over retries; if none succeeded, the latest f
 | tsvc/s2101 | 68621 |
 | tsvc/s2102 | 1151264 |
 | tsvc/s211 | 627778 |
-| tsvc/s2111 |  |
+| tsvc/s2111 | 14924985 |
 | tsvc/s212 | 593216 |
 | tsvc/s221 | 1374241 |
 | tsvc/s222 | 1197019 |

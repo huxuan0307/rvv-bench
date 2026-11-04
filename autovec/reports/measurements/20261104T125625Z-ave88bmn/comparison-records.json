@@ -1,0 +1,30 @@
+[
+  {
+    "run_id": "20261104T125625Z-ave88bmn",
+    "configuration_id": "3f8a7c36afa6d613b046c44b8ae505bad7f3b05bafd5ab6546ca3644954130fe",
+    "compiler": "riscv64-unknown-linux-gnu-gcc (g6afcc4f6d) 16.1.0",
+    "flags": [
+      "-O3",
+      "-march=rv64gcv",
+      "-mabi=lp64d",
+      "-mcmodel=medany",
+      "-ffreestanding",
+      "-fno-builtin",
+      "-fno-pie",
+      "-fno-stack-protector",
+      "-g",
+      "-I",
+      "/nfs/home/huxuan/repos/rvv-bench/autovec"
+    ],
+    "suite": "tsvc",
+    "name": "s2111",
+    "status": "passed",
+    "total_cycles": 14924985,
+    "cycles_per_outer_repetition": 14575.1806640625,
+    "outer_repetitions": 1024,
+    "checksum": "0.00378049000",
+    "binary_sha256": "690658646a6cf6e1ec383730fe34403001ff9fc726f969c14e98014713bae50b",
+    "emulator": "/nfs/share/huxuan/emus/emu-gsim-20261030-005119-6a2a474d04",
+    "reference": "/nfs/share/huxuan/riscv64-nemu-interpreter-so-fixvfredusum"
+  }
+]

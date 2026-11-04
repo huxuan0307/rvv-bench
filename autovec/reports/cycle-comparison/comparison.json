@@ -57,7 +57,8 @@
         "timing": "inline csrr cycle around 1024 outer repetitions, including dummy; excludes initialization and checksum; raw delta without overhead subtraction"
       },
       "source_configuration_ids": [
-        "9d700f7ba06f98d6c932e8dde5c7de1a66577dcd944e63156bc1546f400c5d7d"
+        "9d700f7ba06f98d6c932e8dde5c7de1a66577dcd944e63156bc1546f400c5d7d",
+        "3f8a7c36afa6d613b046c44b8ae505bad7f3b05bafd5ab6546ca3644954130fe"
       ]
     }
   ],
@@ -1729,7 +1730,7 @@
       "selected": true
     },
     {
-      "run_id": "20261104T104917Z-5ojcjg4e",
+      "run_id": "20261104T125625Z-ave88bmn",
       "configuration_id": "295efe803b2c",
       "compiler": "riscv64-unknown-linux-gnu-gcc (g6afcc4f6d) 16.1.0",
       "flags": [
@@ -1747,19 +1748,19 @@
       ],
       "suite": "tsvc",
       "name": "s2111",
-      "status": "timeout",
-      "total_cycles": null,
-      "cycles_per_outer_repetition": null,
+      "status": "passed",
+      "total_cycles": 14924985,
+      "cycles_per_outer_repetition": 14575.1806640625,
       "outer_repetitions": 1024,
-      "checksum": null,
+      "checksum": "0.00378049000",
       "binary_sha256": "690658646a6cf6e1ec383730fe34403001ff9fc726f969c14e98014713bae50b",
       "emulator": "/nfs/share/huxuan/emus/emu-gsim-20261030-005119-6a2a474d04",
       "reference": "/nfs/share/huxuan/riscv64-nemu-interpreter-so-fixvfredusum",
       "configuration_label": "-O3 -march=rv64gcv -mabi=lp64d -mcmodel=medany -ffreestanding -fno-builtin -fno-pie -fno-stack-protector -g -I /nfs/home/huxuan/repos/rvv-bench/autovec",
-      "source_configuration_id": "9d700f7ba06f98d6c932e8dde5c7de1a66577dcd944e63156bc1546f400c5d7d",
-      "source_records": "/nfs/home/huxuan/repos/rvv-bench/autovec/reports/measurements/20261104T104917Z-5ojcjg4e/comparison-records.json",
-      "source_record_index": 87,
-      "started_at": "2026-11-04T18:49:18+08:00",
+      "source_configuration_id": "3f8a7c36afa6d613b046c44b8ae505bad7f3b05bafd5ab6546ca3644954130fe",
+      "source_records": "/nfs/home/huxuan/repos/rvv-bench/autovec/reports/measurements/20261104T125625Z-ave88bmn/comparison-records.json",
+      "source_record_index": 0,
+      "started_at": "2026-11-04T12:56:25.676765+00:00",
       "selected": true
     },
     {
@@ -8188,7 +8189,7 @@
       "source_records": "/nfs/home/huxuan/repos/rvv-bench/autovec/reports/measurements/20261104T104917Z-5ojcjg4e/comparison-records.json",
       "source_record_index": 87,
       "started_at": "2026-11-04T18:49:18+08:00",
-      "selected": true
+      "selected": false
     },
     {
       "run_id": "20261104T104917Z-5ojcjg4e",
@@ -10330,6 +10331,40 @@
       "source_records": "/nfs/home/huxuan/repos/rvv-bench/autovec/reports/measurements/20261104T104917Z-5ojcjg4e/comparison-records.json",
       "source_record_index": 150,
       "started_at": "2026-11-04T18:49:18+08:00",
+      "selected": true
+    },
+    {
+      "run_id": "20261104T125625Z-ave88bmn",
+      "configuration_id": "295efe803b2c",
+      "compiler": "riscv64-unknown-linux-gnu-gcc (g6afcc4f6d) 16.1.0",
+      "flags": [
+        "-O3",
+        "-march=rv64gcv",
+        "-mabi=lp64d",
+        "-mcmodel=medany",
+        "-ffreestanding",
+        "-fno-builtin",
+        "-fno-pie",
+        "-fno-stack-protector",
+        "-g",
+        "-I",
+        "/nfs/home/huxuan/repos/rvv-bench/autovec"
+      ],
+      "suite": "tsvc",
+      "name": "s2111",
+      "status": "passed",
+      "total_cycles": 14924985,
+      "cycles_per_outer_repetition": 14575.1806640625,
+      "outer_repetitions": 1024,
+      "checksum": "0.00378049000",
+      "binary_sha256": "690658646a6cf6e1ec383730fe34403001ff9fc726f969c14e98014713bae50b",
+      "emulator": "/nfs/share/huxuan/emus/emu-gsim-20261030-005119-6a2a474d04",
+      "reference": "/nfs/share/huxuan/riscv64-nemu-interpreter-so-fixvfredusum",
+      "configuration_label": "-O3 -march=rv64gcv -mabi=lp64d -mcmodel=medany -ffreestanding -fno-builtin -fno-pie -fno-stack-protector -g -I /nfs/home/huxuan/repos/rvv-bench/autovec",
+      "source_configuration_id": "3f8a7c36afa6d613b046c44b8ae505bad7f3b05bafd5ab6546ca3644954130fe",
+      "source_records": "/nfs/home/huxuan/repos/rvv-bench/autovec/reports/measurements/20261104T125625Z-ave88bmn/comparison-records.json",
+      "source_record_index": 0,
+      "started_at": "2026-11-04T12:56:25.676765+00:00",
       "selected": true
     }
   ]
