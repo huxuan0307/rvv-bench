@@ -139,7 +139,7 @@ class CollectRunTests(unittest.TestCase):
         logs, metadata = self.collect()
 
         self.assertEqual(logs, self.run / 'logs')
-        self.assertEqual(metadata['started_at'], self.started)
+        self.assertEqual(metadata['started_at'], self.started.replace(' ', 'T') + '+08:00')
         self.assertEqual(metadata['started_at_source'], 'runner.log (runner local time)')
         self.assertEqual(metadata['finished_at'], self.finished)
         self.assertEqual(metadata['jobs'], 7)

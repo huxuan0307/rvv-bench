@@ -1,0 +1,33 @@
+{
+  "metadata": {
+    "build": {
+      "compiler": "riscv64-unknown-linux-gnu-gcc (fixture) 16.1.0",
+      "gcc": "/fixture/bin/riscv64-unknown-linux-gnu-gcc",
+      "flags": ["-O3", "-march=rv64gcv"],
+      "sources": {"TSVC_2": {"commit": "pinned-source", "origin": "fixture:TSVC_2", "dirty": false}}
+    },
+    "emulator": {"path": "/fixture/emu", "size": 100, "mtime_ns": 123},
+    "reference": {"path": "/fixture/ref.so", "size": 200, "mtime_ns": 456},
+    "outer_repetitions": 1024,
+    "timing": "inline cycle CSR delta, including dummy"
+  },
+  "runs": [
+    {"run_id": "01-timeout", "started_at": "2026-11-04T01:00:00Z", "configuration_id": "full-manifest-hash", "records": [
+      {"suite": "tsvc", "name": "s000", "status": "timeout", "total_cycles": null},
+      {"suite": "tsvc", "name": "s001", "status": "passed", "total_cycles": 8192},
+      {"suite": "tsvc", "name": "s002", "status": "failed", "total_cycles": 999}
+    ]},
+    {"run_id": "02-pass", "started_at": "2026-11-04T02:00:00Z", "configuration_id": "single-case-manifest-hash", "records": [
+      {"suite": "tsvc", "name": "s000", "status": "passed", "total_cycles": 4096}
+    ]},
+    {"run_id": "03-other-flags", "started_at": "2026-11-04T03:00:00Z", "configuration_id": "other-flags-hash", "flags": ["-O2", "-march=rv64gcv"], "records": [
+      {"suite": "tsvc", "name": "s000", "status": "passed", "total_cycles": 6144}
+    ]},
+    {"run_id": "04-later-failure", "started_at": "2026-11-04T04:00:00Z", "configuration_id": "failed-retry-hash", "records": [
+      {"suite": "tsvc", "name": "s000", "status": "timeout", "total_cycles": null}
+    ]},
+    {"run_id": "05-latest-pass", "started_at": "2026-11-04T05:00:00Z", "configuration_id": "latest-retry-hash", "records": [
+      {"suite": "tsvc", "name": "s001", "status": "passed", "total_cycles": 7168}
+    ]}
+  ]
+}

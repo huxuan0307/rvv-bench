@@ -13,6 +13,7 @@ import argparse
 from collections import Counter
 import csv
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 import hashlib
 import json
 import os
@@ -195,7 +196,8 @@ def collect_run(run, manifest_path, manifest, manifest_bytes, cases):
         command = [str(RUNNER), '-e', str(emulator), '-r', str(reference),
                    '-t', str(run / 'bin'), '-j', header('parallel'),
                    '--timeout', header('timeout'), '-o', str(run / 'logs')]
-        metadata = {'started_at': header('started'),
+        metadata = {'started_at': datetime.strptime(header('started'), '%Y-%m-%d %H:%M:%S').replace(tzinfo=ZoneInfo('Asia/Shanghai')).isoformat(),
+                    'timing': 'inline csrr cycle around 1024 outer repetitions, including dummy; excludes initialization and checksum; raw delta without overhead subtraction',
                     'started_at_source': 'runner.log (runner local time)',
                     'manifest': str(manifest_path), 'manifest_sha256': digest,
                     'emulator': identity(emulator), 'reference': identity(reference),
