@@ -3,7 +3,7 @@
 
 Examples (from any directory):
     python3 autovec/run_gsim.py --case s000 --jobs 1 --timeout 10m
-    python3 autovec/run_gsim.py --jobs 32 --timeout 2h
+    python3 autovec/run_gsim.py --jobs 32 --timeout 0
 
 Only manifest TSVC images are staged; old aggregate images are never discovered.
 A successful runner exit alone is insufficient: each case needs GOOD TRAP and
@@ -228,7 +228,21 @@ def finish_reports(logs, metadata, cases):
     rows = [parse_case(case, logs, lists) for case in cases]
     reports = ROOT / 'reports/tsvc-gsim-1024'
     counts = write_reports(reports, metadata, rows)
-    print(f'Reports: {reports}; {json.dumps(counts, sort_keys=True)}', flush=True)
+    run_id = Path(metadata['run_directory']).name
+    history = ROOT / 'reports/measurements' / run_id
+    write_reports(history, metadata, rows)
+    # Preserve configuration and each benchmark's raw cycles in an immutable run directory.
+    configuration = {k: metadata.get(k) for k in ('build', 'manifest_sha256', 'binary_sha256', 'emulator', 'reference', 'outer_repetitions')}
+    configuration_id = hashlib.sha256(json.dumps(configuration, sort_keys=True).encode()).hexdigest()
+    records = [{'run_id': run_id, 'configuration_id': configuration_id,
+                'compiler': metadata['build'].get('compiler'), 'flags': metadata['build'].get('flags'),
+                'suite': row['suite'], 'name': row['name'], 'status': row['status'],
+                'total_cycles': row['total_cycles'], 'cycles_per_outer_repetition': row['cycles_per_outer_repetition'],
+                'outer_repetitions': REPETITIONS, 'checksum': row['checksum'],
+                'binary_sha256': metadata.get('binary_sha256', {}).get(row['name']),
+                'emulator': metadata['emulator']['path'], 'reference': metadata['reference']['path']} for row in rows]
+    (history / 'comparison-records.json').write_text(json.dumps(records, indent=2) + '\n')
+    print(f'Reports: {reports}; history: {history}; {json.dumps(counts, sort_keys=True)}', flush=True)
     return int(any(row['status'] != 'passed' for row in rows)
                or metadata['runner_returncode'] not in (None, 0))
 
@@ -241,13 +255,13 @@ def main(argv=None):
     parser.add_argument('--collect-run', type=Path,
                         help='collect existing build/gsim-1024 run logs without launching emulators')
     parser.add_argument('--jobs', type=int, default=32, help='runner concurrency: 1..64 (default: 32)')
-    parser.add_argument('--timeout', default='2h', help='positive GNU timeout duration per case (default: 2h)')
+    parser.add_argument('--timeout', default='0', help='GNU timeout duration per case; 0 disables timeout (default: 0)')
     args = parser.parse_args(argv)
     if not 1 <= args.jobs <= 64:
         parser.error('--jobs must be between 1 and 64')
     if not re.fullmatch(r'(?:\d+(?:\.\d*)?|\.\d+)[smhd]?', args.timeout) or float(
-            args.timeout.rstrip('smhd')) <= 0:
-        parser.error('--timeout must be a positive duration, e.g. 180, 30m, or 2h')
+            args.timeout.rstrip('smhd')) < 0:
+        parser.error('--timeout must be 0 (disabled) or a positive duration, e.g. 180, 30m, or 2h')
     manifest_path = args.manifest.resolve()
     manifest_bytes = manifest_path.read_bytes()
     manifest = json.loads(manifest_bytes)

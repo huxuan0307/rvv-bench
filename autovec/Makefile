@@ -7,7 +7,7 @@ JOBS ?= 8
 NEMU ?= /nfs/home/huxuan/opt/bin/riscv64-nemu-interpreter
 CASE ?= s000
 GSIM_JOBS ?= 32
-GSIM_TIMEOUT ?= 2h
+GSIM_TIMEOUT ?= 0
 .PHONY: gsim
 gsim:
 	$(PYTHON) run_gsim.py --manifest build/$(OPT)/manifest.json --jobs $(GSIM_JOBS) --timeout $(GSIM_TIMEOUT)

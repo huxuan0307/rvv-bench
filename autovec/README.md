@@ -51,7 +51,7 @@ python3 autovec/build.py --suite tsvc --case s151
 
 ```bash
 python3 autovec/build.py --suite tsvc --jobs 16
-python3 autovec/run_gsim.py --jobs 32 --timeout 2h
+python3 autovec/run_gsim.py --jobs 32 --timeout 0
 # 仅测一项
 python3 autovec/run_gsim.py --case s000 --jobs 1
 # 从已有完整运行日志重新汇总，不启动模拟器
@@ -60,7 +60,7 @@ python3 autovec/run_gsim.py --collect-run autovec/build/gsim-1024/<run-id>
 
 生成内核在原始计时边界内联两条 `csrr ..., cycle`，附带编译器 memory barrier；初始化和 checksum 在计时区间外，区间包含 1024 次外层重复、内层循环、dummy 调用及循环控制。未减去 CSR 读数开销，也未插入硬件 fence；结果是该代码区间的 CSR 周期差，不保证最后一次 store 已写回外部内存。输出 `AV cycles=... checksum=... iterations=1024`；`cycles/1024` 表示一次完整外层重复的平均周期，不是单个内层元素或一条 RVV 指令的吞吐。
 
-脚本调用 PATH 中的 run_emu.sh（当前安装位置 `/nfs/home/huxuan/opt/bin/run_emu.sh`），自动选择 `/nfs/share/huxuan/emus/emu-gsim-*` 中修改时间最新者，开启 diff，参考模型为 `/nfs/share/huxuan/riscv64-nemu-interpreter-so-fixvfredusum`。并发范围 1–64，默认32。按清单生成扁平 BIN 软链接目录，避免运行旧聚合镜像。日志位于忽略的 `build/gsim-1024/`，结果保存到 `reports/tsvc-gsim-1024/results.{md,csv,json}`，逐项检查 runner 状态、GOOD TRAP、cycle 输出和错误日志；超时不会当成成功。
+脚本调用 PATH 中的 run_emu.sh（当前安装位置 `/nfs/home/huxuan/opt/bin/run_emu.sh`），自动选择 `/nfs/share/huxuan/emus/emu-gsim-*` 中修改时间最新者，开启 diff，参考模型为 `/nfs/share/huxuan/riscv64-nemu-interpreter-so-fixvfredusum`。并发范围 1–64，默认32；默认 `--timeout 0` 禁用超时，已有超时项应使用相同镜像重新运行并取消时限。按清单生成扁平 BIN 软链接目录，避免运行旧聚合镜像。日志位于忽略的 `build/gsim-1024/`，结果保存到 `reports/tsvc-gsim-1024/results.{md,csv,json}`，逐项检查 runner 状态、GOOD TRAP、cycle 输出和错误日志；超时不会当成成功。每次结果同时保存到 `reports/measurements/<run-id>/`，其中 `comparison-records.json` 按 benchmark 记录原始总周期、平均外层重复周期、编译器和参数、配置ID、镜像哈希及模拟器/ref路径，供跨编译器和参数对比。比较时应固定源码、数据规模、迭代数、计时边界和模拟器/ref版本；不同运行结果不会覆盖历史记录。
 
 ## 覆盖与适配
 
