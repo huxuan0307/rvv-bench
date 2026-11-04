@@ -1,10 +1,10 @@
 # TSVC gsim: 1024 outer repetitions
 
-Run: 2026-11-04T12:56:25.676765+00:00
+Run: 2026-11-04T13:37:46.036089+00:00
 
 Cases: 1; statuses: {"passed": 1}
 
-Passed cases total cycles: 14924985; sum of cycles / 1024: 14575.1806640625
+Passed cases total cycles: 9103290; sum of cycles / 1024: 8889.931640625
 
 Cycles are the AV driver total divided by 1024 outer repetitions; they are not cycles per inner kernel iteration. The raw interval includes dummy calls and CSR read overhead; initialization and checksum are outside. No hardware fence or warmup is added.
 
@@ -12,17 +12,17 @@ Nonfinite checksum values (inf/NaN) indicate overflow or invalid arithmetic in t
 
 | Case | Status | Total cycles | Cycles / 1024 | Checksum | Reason | Logs |
 | --- | --- | ---: | ---: | --- | --- | --- |
-| s2111 | passed | 14924985 | 14575.1806640625 | 0.00378049000 |  | [run-s2111.log](</nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T125625Z-ave88bmn/logs/20261104-205625/run-s2111.log>) [run-s2111.err](</nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T125625Z-ave88bmn/logs/20261104-205625/run-s2111.err>) |
+| s451 | passed | 9103290 | 8889.931640625 | 325.377991 |  | [run-s451.log](</nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T133746Z-3ojg3ajr/logs/20261104-213746/run-s451.log>) [run-s451.err](</nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T133746Z-3ojg3ajr/logs/20261104-213746/run-s451.err>) |
 
 ## Run and build information
 
 ```json
 {
   "binary_sha256": {
-    "s2111": "690658646a6cf6e1ec383730fe34403001ff9fc726f969c14e98014713bae50b"
+    "s451": "81bacea97f3bf92cc1be8289c741de0fadc13ecdb4a9852fa058abcdee3c2d3c"
   },
   "timing": "inline csrr cycle around 1024 outer repetitions, including dummy; excludes initialization and checksum; raw delta without overhead subtraction",
-  "started_at": "2026-11-04T12:56:25.676765+00:00",
+  "started_at": "2026-11-04T13:37:46.036089+00:00",
   "manifest": "/nfs/home/huxuan/repos/rvv-bench/autovec/build/O3/manifest.json",
   "manifest_sha256": "3946ddcfe791f688bfdbcda628df39c52888fe2a8b59f577029c9a798d830ce5",
   "emulator": {
@@ -85,10 +85,10 @@ Nonfinite checksum values (inf/NaN) indicate overflow or invalid arithmetic in t
   "jobs": 1,
   "timeout": "0",
   "outer_repetitions": 1024,
-  "run_directory": "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T125625Z-ave88bmn",
-  "staging_directory": "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T125625Z-ave88bmn/bin",
-  "runner_stdout": "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T125625Z-ave88bmn/runner.log",
-  "runner_stderr": "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T125625Z-ave88bmn/runner.err",
+  "run_directory": "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T133746Z-3ojg3ajr",
+  "staging_directory": "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T133746Z-3ojg3ajr/bin",
+  "runner_stdout": "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T133746Z-3ojg3ajr/runner.log",
+  "runner_stderr": "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T133746Z-3ojg3ajr/runner.err",
   "command": [
     "/nfs/home/huxuan/opt/bin/run_emu.sh",
     "-e",
@@ -96,16 +96,16 @@ Nonfinite checksum values (inf/NaN) indicate overflow or invalid arithmetic in t
     "-r",
     "/nfs/share/huxuan/riscv64-nemu-interpreter-so-fixvfredusum",
     "-t",
-    "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T125625Z-ave88bmn/bin",
+    "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T133746Z-3ojg3ajr/bin",
     "-j",
     "1",
     "--timeout",
     "0",
     "-o",
-    "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T125625Z-ave88bmn/logs"
+    "/nfs/home/huxuan/repos/rvv-bench/autovec/build/gsim-1024/20261104T133746Z-3ojg3ajr/logs"
   ],
   "runner_returncode": 0,
-  "finished_at": "2026-11-04T15:10:10.009322+00:00",
-  "collected_at": "2026-11-04T15:10:23.144942+00:00"
+  "finished_at": "2026-11-04T15:33:42.557280+00:00",
+  "collected_at": "2026-11-04T15:33:50.887660+00:00"
 }
 ```
