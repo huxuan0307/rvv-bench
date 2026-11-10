@@ -62,6 +62,8 @@ python3 -B autovec/build.py --suite tsvc --case s000 \
 
 旧的build、日志、任务目录已按原字节保留在本地忽略路径，用于追溯，不提交Git。历史manifest/run-metadata内的绝对路径是**当时的身份来源**，不能直接在新目录执行它们的runner/collector：那会访问旧位置。不要把这些路径批量改写后冒充原始证据。
 
+迁移副本中复制来的旧默认构建目录（autovec/build、single/build、single/veclibm-accuracy/build、instructions/rvv/build、bench/build）已隔离到`.dsh/archive/pre-migration-default-builds/`下的同名相对位置，避免默认入口读到旧manifest。历史文档中的build链接需要按此归档位置查阅；新验证数据位于`.dsh/runs/`，全新构建可以重新建立默认build目录。
+
 后续构建必须新建输出目录，生成指向新checkout的manifest；新运行器对新manifest建新run目录。阅读历史CSV/JSON可以使用普通文件读取，不通过历史路径重放。只有需要离线回收时，libmvec recover工具可用迁移后的manifest文件路径，且不会核验/访问历史BIN，仅按其配置解析新指定日志。
 
 `.gitignore`排除`.dsh`、build、缓存、logs、开发图片和本地临时数据。提交时按显式源码清单分批stage，检查`git diff --cached --stat`与`git diff --cached --check`，不使用`git add .`。现有已跟踪的历史报告不因ignore而删除。
