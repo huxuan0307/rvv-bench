@@ -1,0 +1,566 @@
+{
+  "acos.test": {
+    "points": 240,
+    "grid_points": 15
+  },
+  "acosI.test": {
+    "points": 1120,
+    "grid_points": 33
+  },
+  "acosh.test": {
+    "points": 228,
+    "grid_points": 15
+  },
+  "acoshI.test": {
+    "points": 852,
+    "grid_points": 29
+  },
+  "acospi.test": {
+    "points": 236,
+    "grid_points": 15
+  },
+  "acospiI.test": {
+    "points": 1088,
+    "grid_points": 33
+  },
+  "asin.test": {
+    "points": 264,
+    "grid_points": 16
+  },
+  "asinI.test": {
+    "points": 1148,
+    "grid_points": 33
+  },
+  "asinh.test": {
+    "points": 96,
+    "grid_points": 9
+  },
+  "asinhI.test": {
+    "points": 856,
+    "grid_points": 29
+  },
+  "asinpI.test": {
+    "points": 256,
+    "grid_points": 16
+  },
+  "asinpiI.test": {
+    "points": 1116,
+    "grid_points": 33
+  },
+  "atan.test": {
+    "points": 380,
+    "grid_points": 19
+  },
+  "atan2.test": {
+    "points": 180,
+    "grid_points": 13
+  },
+  "atan2I.test": {
+    "points": 1364,
+    "grid_points": 36
+  },
+  "atan2pi.test": {
+    "points": 188,
+    "grid_points": 13
+  },
+  "atan2piI.test": {
+    "points": 1320,
+    "grid_points": 36
+  },
+  "atanI.test": {
+    "points": 1500,
+    "grid_points": 38
+  },
+  "atanh.test": {
+    "points": 100,
+    "grid_points": 10
+  },
+  "atanhI.test": {
+    "points": 872,
+    "grid_points": 29
+  },
+  "atanpi.test": {
+    "points": 368,
+    "grid_points": 19
+  },
+  "atanpiI.test": {
+    "points": 1440,
+    "grid_points": 37
+  },
+  "cbrt.test": {
+    "points": 180,
+    "grid_points": 13
+  },
+  "cbrtI.test": {
+    "points": 1524,
+    "grid_points": 39
+  },
+  "cdfnorm.test": {
+    "points": 72,
+    "grid_points": 8
+  },
+  "cdfnormI.test": {
+    "points": 436,
+    "grid_points": 20
+  },
+  "cdfnorminv.special": {
+    "points": 16,
+    "grid_points": 4
+  },
+  "cdfnorminv.tiny_args": {
+    "points": 108,
+    "grid_points": 10
+  },
+  "cdfnorminv.small_args": {
+    "points": 176,
+    "grid_points": 13
+  },
+  "cdfnorminv.medium_args": {
+    "points": 192,
+    "grid_points": 13
+  },
+  "cdfnorminvI.test": {
+    "points": 624,
+    "grid_points": 25
+  },
+  "cos.special": {
+    "points": 16,
+    "grid_points": 4
+  },
+  "cos.near_NPiby2": {
+    "points": 16,
+    "grid_points": 4
+  },
+  "cos.small_args": {
+    "points": 672,
+    "grid_points": 25
+  },
+  "cos.medium_args": {
+    "points": 584,
+    "grid_points": 24
+  },
+  "cos.large_args": {
+    "points": 584,
+    "grid_points": 24
+  },
+  "cosI.test": {
+    "points": 1784,
+    "grid_points": 42
+  },
+  "cosh.special": {
+    "points": 16,
+    "grid_points": 4
+  },
+  "cosh.small_args": {
+    "points": 528,
+    "grid_points": 22
+  },
+  "cosh.medium_args": {
+    "points": 612,
+    "grid_points": 24
+  },
+  "cosh.large_args": {
+    "points": 1228,
+    "grid_points": 35
+  },
+  "coshI.test": {
+    "points": 984,
+    "grid_points": 31
+  },
+  "cospi.test": {
+    "points": 544,
+    "grid_points": 32
+  },
+  "cospiI.test": {
+    "points": 3304,
+    "grid_points": 57
+  },
+  "erf.test": {
+    "points": 108,
+    "grid_points": 10
+  },
+  "erfI.test": {
+    "points": 460,
+    "grid_points": 21
+  },
+  "erfc.special": {
+    "points": 16,
+    "grid_points": 4
+  },
+  "erfc.medium_args": {
+    "points": 1208,
+    "grid_points": 34
+  },
+  "erfc.around_one": {
+    "points": 332,
+    "grid_points": 18
+  },
+  "erfc.large": {
+    "points": 212,
+    "grid_points": 14
+  },
+  "erfcI.test": {
+    "points": 460,
+    "grid_points": 21
+  },
+  "erfcinv.special": {
+    "points": 16,
+    "grid_points": 4
+  },
+  "erfcinv.tiny_args": {
+    "points": 112,
+    "grid_points": 10
+  },
+  "erfcinv.small_args": {
+    "points": 164,
+    "grid_points": 12
+  },
+  "erfcinv.medium_args": {
+    "points": 200,
+    "grid_points": 14
+  },
+  "erfcinvI.test": {
+    "points": 680,
+    "grid_points": 26
+  },
+  "erfinv.special": {
+    "points": 16,
+    "grid_points": 4
+  },
+  "erfinv.small_args": {
+    "points": 232,
+    "grid_points": 15
+  },
+  "erfinv.middle_args": {
+    "points": 104,
+    "grid_points": 10
+  },
+  "erfinv.close_to_1": {
+    "points": 324,
+    "grid_points": 18
+  },
+  "erfinvI.test": {
+    "points": 656,
+    "grid_points": 25
+  },
+  "exp.special": {
+    "points": 16,
+    "grid_points": 4
+  },
+  "exp.small_args": {
+    "points": 672,
+    "grid_points": 25
+  },
+  "exp.medium_args": {
+    "points": 644,
+    "grid_points": 25
+  },
+  "exp.large_args": {
+    "points": 632,
+    "grid_points": 25
+  },
+  "exp10.special": {
+    "points": 16,
+    "grid_points": 4
+  },
+  "exp10.small_args": {
+    "points": 368,
+    "grid_points": 19
+  },
+  "exp10.medium_args": {
+    "points": 368,
+    "grid_points": 19
+  },
+  "exp10.large_args": {
+    "points": 364,
+    "grid_points": 19
+  },
+  "exp10I.test": {
+    "points": 768,
+    "grid_points": 27
+  },
+  "exp2.special": {
+    "points": 16,
+    "grid_points": 4
+  },
+  "exp2.small_args": {
+    "points": 648,
+    "grid_points": 25
+  },
+  "exp2.medium_args": {
+    "points": 756,
+    "grid_points": 27
+  },
+  "exp2.large_args": {
+    "points": 744,
+    "grid_points": 27
+  },
+  "exp2I.test": {
+    "points": 1360,
+    "grid_points": 36
+  },
+  "expI.test": {
+    "points": 1484,
+    "grid_points": 38
+  },
+  "expint1.test": {
+    "points": 16,
+    "grid_points": 4
+  },
+  "expint1I.test": {
+    "points": 380,
+    "grid_points": 19
+  },
+  "expm1.special": {
+    "points": 16,
+    "grid_points": 4
+  },
+  "expm1.small_args": {
+    "points": 516,
+    "grid_points": 22
+  },
+  "expm1.medium_args": {
+    "points": 244,
+    "grid_points": 15
+  },
+  "expm1.large_args": {
+    "points": 552,
+    "grid_points": 23
+  },
+  "expm1I.test": {
+    "points": 1080,
+    "grid_points": 32
+  },
+  "lgamma.special": {
+    "points": 16,
+    "grid_points": 4
+  },
+  "lgamma.lgamma_neg": {
+    "points": 16,
+    "grid_points": 4
+  },
+  "lgamma.lgamma_left": {
+    "points": 108,
+    "grid_points": 10
+  },
+  "lgamma.lgamma_right": {
+    "points": 512,
+    "grid_points": 22
+  },
+  "lgamma.lgamma_large": {
+    "points": 548,
+    "grid_points": 23
+  },
+  "lgammaI.test": {
+    "points": 1064,
+    "grid_points": 32
+  },
+  "log.special": {
+    "points": 16,
+    "grid_points": 4
+  },
+  "log.around_1": {
+    "points": 432,
+    "grid_points": 20
+  },
+  "log.extreme_args": {
+    "points": 584,
+    "grid_points": 24
+  },
+  "log10.special": {
+    "points": 16,
+    "grid_points": 4
+  },
+  "log10.around_1": {
+    "points": 268,
+    "grid_points": 16
+  },
+  "log10.extreme_args": {
+    "points": 556,
+    "grid_points": 23
+  },
+  "log10I.test": {
+    "points": 960,
+    "grid_points": 31
+  },
+  "log1p.special": {
+    "points": 16,
+    "grid_points": 4
+  },
+  "log1p.small_args": {
+    "points": 416,
+    "grid_points": 20
+  },
+  "log1p.large_args": {
+    "points": 1060,
+    "grid_points": 32
+  },
+  "log1pI.test": {
+    "points": 1156,
+    "grid_points": 34
+  },
+  "log2.special": {
+    "points": 16,
+    "grid_points": 4
+  },
+  "log2.around_1": {
+    "points": 284,
+    "grid_points": 16
+  },
+  "log2.extreme_args": {
+    "points": 628,
+    "grid_points": 25
+  },
+  "log2I.test": {
+    "points": 1052,
+    "grid_points": 32
+  },
+  "logI.test": {
+    "points": 2368,
+    "grid_points": 48
+  },
+  "pow.special": {
+    "points": 16,
+    "grid_points": 4
+  },
+  "pow.medium_args": {
+    "points": 52,
+    "grid_points": 7
+  },
+  "pow.large_args": {
+    "points": 24,
+    "grid_points": 5
+  },
+  "powI.test": {
+    "points": 1300,
+    "grid_points": 36
+  },
+  "sin.special": {
+    "points": 16,
+    "grid_points": 4
+  },
+  "sin.small_args": {
+    "points": 676,
+    "grid_points": 26
+  },
+  "sin.near_NPiby2": {
+    "points": 16,
+    "grid_points": 4
+  },
+  "sin.medium_args": {
+    "points": 584,
+    "grid_points": 24
+  },
+  "sin.large_args": {
+    "points": 584,
+    "grid_points": 24
+  },
+  "sinI.test": {
+    "points": 1772,
+    "grid_points": 42
+  },
+  "sincos.small_args": {
+    "points": 340,
+    "grid_points": 18
+  },
+  "sincos.large_args": {
+    "points": 156,
+    "grid_points": 12
+  },
+  "sincos.near_Npiby2": {
+    "points": 64,
+    "grid_points": 8
+  },
+  "sincosI.test": {
+    "points": 2000,
+    "grid_points": 44
+  },
+  "sincospi.test": {
+    "points": 272,
+    "grid_points": 18
+  },
+  "sincospiI.test": {
+    "points": 1072,
+    "grid_points": 32
+  },
+  "sinh.special": {
+    "points": 16,
+    "grid_points": 4
+  },
+  "sinh.small_args": {
+    "points": 452,
+    "grid_points": 21
+  },
+  "sinh.medium_args": {
+    "points": 520,
+    "grid_points": 22
+  },
+  "sinh.large_args": {
+    "points": 1228,
+    "grid_points": 35
+  },
+  "sinhI.test": {
+    "points": 960,
+    "grid_points": 31
+  },
+  "sinpi.test": {
+    "points": 532,
+    "grid_points": 23
+  },
+  "sinpiI.test": {
+    "points": 1356,
+    "grid_points": 36
+  },
+  "tan.special": {
+    "points": 16,
+    "grid_points": 4
+  },
+  "tan.near_NPiby2": {
+    "points": 16,
+    "grid_points": 4
+  },
+  "tan.small_args": {
+    "points": 640,
+    "grid_points": 25
+  },
+  "tan.large_args": {
+    "points": 348,
+    "grid_points": 18
+  },
+  "tanI.test": {
+    "points": 1648,
+    "grid_points": 40
+  },
+  "tanh.test": {
+    "points": 304,
+    "grid_points": 17
+  },
+  "tanhI.test": {
+    "points": 968,
+    "grid_points": 31
+  },
+  "tanpi.test": {
+    "points": 492,
+    "grid_points": 22
+  },
+  "tgamma.special": {
+    "points": 16,
+    "grid_points": 4
+  },
+  "tgamma.gamma_tiny": {
+    "points": 244,
+    "grid_points": 15
+  },
+  "tgamma.gamma_moderate": {
+    "points": 88,
+    "grid_points": 9
+  },
+  "tgamma.gamma_large": {
+    "points": 80,
+    "grid_points": 9
+  },
+  "tgammaI.test": {
+    "points": 604,
+    "grid_points": 24
+  }
+}

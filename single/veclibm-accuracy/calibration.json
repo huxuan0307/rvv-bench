@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "profile": "quick.json",
+  "method": "Run every TEST at points=16, grid_points=4, repeats=1; scale continuous cap toward 9.5M whole-program NEMU instructions and grid cap by square root; never exceed upstream requested counts; do not pad short tests.",
+  "initial_evidence": "build/run-p16-g4/results.json",
+  "initial_caveat": "Initial runner falsely rejected failed=0 markers. Three real cospi-reference failures exposed missing standard C++ long-double math overloads and were fixed by the math compatibility header, not by relaxing thresholds.",
+  "second_evidence": "build/run-quick-v1/results.json",
+  "final_adjustments": {
+    "cospi.test": {"points_before": 1044, "points_after": 544},
+    "sincospi.test": {"points_before": 356, "points_after": 272}
+  },
+  "final_evidence": "build/run-final-parent/results.json",
+  "final_evidence_note": "End-to-end make -C single run-veclibm-accuracy, with ordinary upstream diagnostics restored; only unsupported %L calls suppressed.",
+  "final_runner_range_max": 15000000,
+  "final_summary": {
+    "cases": 141,
+    "functional_pass": 141,
+    "assertions": 467,
+    "assertion_bearing_cases": 131,
+    "zero_check_cases": 10,
+    "failed_assertions": 0,
+    "at_least_1M": 88,
+    "below_1M": 53,
+    "short_special_value_tests": 20,
+    "short_stride_tests": 33,
+    "minimum_guest_instructions": 4923,
+    "median_guest_instructions": 8684598,
+    "maximum_guest_instructions": 11041070,
+    "maximum_case": "lgamma.lgamma_right",
+    "sum_guest_instructions": 746413217
+  },
+  "short_case_reason": "All 53 short cases already retain their entire original small workload: 20 special-value vector tests and 33 strided tests, mostly 30 points, sincosI 8 points, powI 6x7 grid. They are not repeated to manufacture an instruction minimum.",
+  "limitations": "Counts depend on toolchain, VLEN and NEMU. All quick-profile numerical assertions pass only at the selected points; full original-density execution was not performed."
+}

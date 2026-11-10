@@ -1,4 +1,5 @@
 .POSIX:
+.DEFAULT_GOAL := all
 
 include ../config.mk
 
@@ -7,12 +8,17 @@ VECLIBM_FUNCS = exp exp2 expm1 log log10 log2 log1p sqrt cbrt \
                 sinh cosh tanh asinh acosh atanh \
                 erf erfc tgamma lgamma
 
-# data size (number of double-precision elements, ~1MB per array at default)
-VECLIBM_N ?= 131072
+# Optional uniform-size build. Default `all` uses calibrated veclibm-quick.
+# Restore the historical array size with VECLIBM_N=131072 veclibm-all.
+VECLIBM_N ?= 4096
+VECLIBM_REPEATS ?= 3
+NEMU ?= /nfs/home/huxuan/opt/bin/riscv64-nemu-interpreter
+VECLIBM_RUN_DIR ?= build/veclibm-runs/$(shell date +%Y%m%d-%H%M%S)
+VECLIBM_QUICK_DIR ?= build/veclibm-quick
 
-# all output under build/ — names include data size, e.g. veclibm-sqrt-n131072.elf
-VECLIBM_ELFS  = $(VECLIBM_FUNCS:%=build/veclibm-%-n$(VECLIBM_N).elf)
-EXECS         = build/uarch.elf build/veclibm-n$(VECLIBM_N).elf ${VECLIBM_ELFS}
+# Include repeats in artifact names so changed parameters never reuse old ELFs.
+VECLIBM_ELFS  = $(VECLIBM_FUNCS:%=build/veclibm-%-n$(VECLIBM_N)-r$(VECLIBM_REPEATS).elf)
+EXECS         = build/uarch.elf build/veclibm-n$(VECLIBM_N)-r$(VECLIBM_REPEATS).elf ${VECLIBM_ELFS}
 DASMS         = $(EXECS:.elf=.dasm)
 BINS          = $(EXECS:.elf=.bin)
 
@@ -22,19 +28,21 @@ VECLIBM_INC_DIR = ../thirdparty/veclibm/include
 VECLIBM_SRC     = $(wildcard $(VECLIBM_SRC_DIR)/*.c)
 VECLIBM_OBJ     = $(VECLIBM_SRC:$(VECLIBM_SRC_DIR)/%.c=build/veclibm-obj/%.o)
 
-VECLIBM_CFLAGS = -march=rv64gcv_zba_zbb_zbs_zvbb -mcmodel=medany -O2 -g ${WARN} \
+VECLIBM_CFLAGS = -march=rv64gcv -mabi=lp64d -mcmodel=medany -O2 -g ${WARN} \
                   -I $(VECLIBM_INC_DIR) -Wno-unused -Wno-maybe-uninitialized \
-                  -fno-builtin-printf -ffreestanding \
-                  -Wl,--wrap=_trm_init
+                  -fno-builtin -ffreestanding -fno-pie -fno-stack-protector
+VECLIBM_LINK = -nostdlib -static -no-pie -Wl,--wrap=_trm_init -Wl,--build-id=none \
+               -T ../autovec/tls.ld -T ../thirdparty/link.ld \
+               build/veclibm.a build/veclibm-runtime.o ../thirdparty/am-riscv64-xs.a \
+               -Wl,--start-group ../thirdparty/klib-riscv64-xs.a -lm -lc -lgcc -Wl,--end-group
 
-$(shell mkdir -p build/veclibm-obj)
-
-all: ${EXECS}
+all: build/uarch.elf veclibm-quick
 
 ${EXECS}: ../config.mk
 
 # --- uarch ---
 build/uarch.elf: uarch.S uarch.c
+	@mkdir -p $(@D)
 	@echo "  CC+LD $@"
 	@${CC} ${CFLAGS} -o $@ uarch.c uarch.S \
 		-T ../thirdparty/link.ld \
@@ -50,43 +58,29 @@ build/veclibm.a: $(VECLIBM_OBJ)
 	@echo "  AR    $@"
 	@${TOOL_CHAIN_PREFIX}ar rcs $@ $^
 
-build/veclibm-obj/%.o: $(VECLIBM_SRC_DIR)/%.c
+build/veclibm-obj/%.o: $(VECLIBM_SRC_DIR)/%.c $(wildcard $(VECLIBM_INC_DIR)/*.h) Makefile ../config.mk
 	@mkdir -p $(@D)
 	@echo "  CC    $@"
 	@${CC} $(VECLIBM_CFLAGS) -c -o $@ $<
 
-# --- veclibm full (all 25 functions in one binary) ---
-# Uses lm_stubs.o (compiled medany) instead of -lm (precompiled medlow can't reach 0x80000000)
-build/veclibm-n$(VECLIBM_N).elf: veclibm.c build/veclibm.a build/lm_stubs.o
+build/veclibm-runtime.o: veclibm-runtime.c ../autovec/av_runtime.c ../autovec/av_runtime.h Makefile ../config.mk
+	@mkdir -p $(@D)
+	@${CC} $(VECLIBM_CFLAGS) -fno-tree-vectorize -c $< -o $@
+
+# --- fixed-size full / per-function programs, linked to real static libm ---
+build/veclibm-n$(VECLIBM_N)-r$(VECLIBM_REPEATS).elf: veclibm.c build/veclibm.a build/veclibm-runtime.o Makefile ../config.mk ../autovec/tls.ld ../thirdparty/link.ld
 	@echo "  LD    $@"
-	@${CC} -nostdlib $(VECLIBM_CFLAGS) -DVECLIBM_N=$(VECLIBM_N) \
-		-o $@ $< build/veclibm.a build/lm_stubs.o \
-		-T ../thirdparty/link.ld \
-		../thirdparty/am-riscv64-xs.a \
-		../thirdparty/klib-riscv64-xs.a
-	@echo "  DUMP  $(@:.elf=.dasm)"
+	@${CC} $(VECLIBM_CFLAGS) -DVECLIBM_N=$(VECLIBM_N) -DVECLIBM_REPEATS=$(VECLIBM_REPEATS) \
+		-o $@ $< $(VECLIBM_LINK)
 	@${DUMP} -S -d $@ > $(@:.elf=.dasm)
-	@echo "  OBJCP $(@:.elf=.bin)"
 	@${OBJCOPY} -S --set-section-flags .bss=alloc,contents -O binary $@ $(@:.elf=.bin)
 
-# --- veclibm per-function (e.g. make build/veclibm-exp-n131072.elf) ---
-build/veclibm-%-n$(VECLIBM_N).elf: veclibm.c build/veclibm.a build/lm_stubs.o
+build/veclibm-%-n$(VECLIBM_N)-r$(VECLIBM_REPEATS).elf: veclibm.c build/veclibm.a build/veclibm-runtime.o Makefile ../config.mk ../autovec/tls.ld ../thirdparty/link.ld
 	@echo "  LD    $@ (-DTEST_FUNC=$*)"
-	@${CC} -nostdlib $(VECLIBM_CFLAGS) -DVECLIBM_N=$(VECLIBM_N) -DTEST_FUNC=$* \
-		-o $@ $< build/veclibm.a build/lm_stubs.o \
-		-T ../thirdparty/link.ld \
-		../thirdparty/am-riscv64-xs.a \
-		../thirdparty/klib-riscv64-xs.a
-	@echo "  DUMP  $(@:.elf=.dasm)"
+	@${CC} $(VECLIBM_CFLAGS) -DVECLIBM_N=$(VECLIBM_N) -DVECLIBM_REPEATS=$(VECLIBM_REPEATS) -DTEST_FUNC=$* \
+		-o $@ $< $(VECLIBM_LINK)
 	@${DUMP} -S -d $@ > $(@:.elf=.dasm)
-	@echo "  OBJCP $(@:.elf=.bin)"
 	@${OBJCOPY} -S --set-section-flags .bss=alloc,contents -O binary $@ $(@:.elf=.bin)
-
-# --- bare-metal scalar math stubs (compiled medany, no libm dependency) ---
-build/lm_stubs.o: lm_stubs.c
-	@mkdir -p $(@D)
-	@echo "  CC    $@"
-	@${CC} $(VECLIBM_CFLAGS) -c -o $@ $<
 
 # --- convenience ---
 # build all per-function tests at current data size
@@ -103,6 +97,24 @@ veclibm-sweep:
 		$(MAKE) VECLIBM_N=$$n veclibm-all || exit 1; \
 	done
 	@echo "=== sweep done: $(words $(VECLIBM_SIZES)) sizes x $(words $(VECLIBM_FUNCS)) funcs ==="
+
+.PHONY: veclibm-all veclibm-quick run-veclibm run-veclibm-quick veclibm-accuracy run-veclibm-accuracy
+
+# Calibrated sizes target ~10M total NEMU guest instructions per function.
+veclibm-quick:
+	python3 build_veclibm.py --gcc $(CC) --config veclibm-quick.json --output $(VECLIBM_QUICK_DIR)
+
+run-veclibm: veclibm-all
+	python3 run_veclibm.py --nemu $(NEMU) --bins $(VECLIBM_ELFS:.elf=.bin) --output $(VECLIBM_RUN_DIR)
+
+run-veclibm-quick: veclibm-quick
+	python3 run_veclibm.py --nemu $(NEMU) --manifest $(VECLIBM_QUICK_DIR)/manifest.json --output $(VECLIBM_RUN_DIR) --range-min 5000000 --range-max 15000000 --require-budget
+
+veclibm-accuracy:
+	$(MAKE) -C veclibm-accuracy all
+
+run-veclibm-accuracy:
+	$(MAKE) -C veclibm-accuracy run NEMU=$(NEMU)
 
 dasm: ${EXECS}
 bin:  ${EXECS}
