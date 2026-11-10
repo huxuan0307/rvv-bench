@@ -16,6 +16,12 @@ Bare-metal adaptations of TSVC_2, all 30 PolyBench/C kernels, and LLVM Vectorize
 
 Measures the cycle count of RVV instructions by unrolling and looping over the given instruction repeatedly.
 
+## 香山裸机数学库与本地运行环境
+
+- [single/README.md](<single/README.md>)：原始veclibm性能、上游精度测试、NEMU与gsim脚本用法。
+- [libmvec/README.zh.md](<single/libmvec/README.zh.md>)：已发布RVV libmvec的36公开ABI、七函数性能矩阵、紧凑CSV与RTL失败时完整行回收。
+- [运行环境与Git更新](<docs/RUNTIME.zh.md>)：工作区内独立checkout、输入依赖、remote同步及迁移后历史证据使用边界。
+
 ## Quick start
 
 **The easiest way to run the benchmarks is using the `./bench-all.sh` script.**

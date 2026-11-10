@@ -4,7 +4,7 @@
 
 ## 构建与运行
 
-源码默认来自相邻 compiler-experiment 的 benchmarks 目录；完整版本在该项目清单中固定，构建清单还会记录每个上游的实际 SHA、origin 和工作区状态。来源保持各自许可证，生成源码不提交到 rvv-bench。
+源码按以下优先级定位：显式`--sources`/Make `SOURCES=`，环境变量`RVV_BENCH_SOURCES`，本仓`.dsh/deps/benchmarks`，最后兼容相邻compiler-experiment的benchmarks目录。TSVC主机测试采用相同规则。构建清单记录每个上游的实际SHA、origin和工作区状态；来源保持各自许可证，依赖checkout及生成源码不提交到rvv-bench。
 
 ```bash
 # 从 rvv-bench 根目录
@@ -26,6 +26,18 @@ python3 autovec/compare.py
 裸机必需的 `-ffreestanding -fno-builtin -nostdlib` 与 RVV ISA、优化等级是显式实验条件，不声称复现上游宿主 Makefile 的默认配置。禁用 LTO，TSVC dummy 保持独立翻译单元。
 
 运行依赖 `/nfs/home/huxuan/opt/bin/riscv64-nemu-interpreter`，可通过 Make 的 `NEMU=` 或 run.py 的 `--nemu` 覆盖。NEMU 的 GOOD TRAP 和退出状态决定是否成功；超时/错误会保留日志并返回失败。NEMU 是功能验证环境，不将其 cycle 解释为硬件加速比。
+
+## 独立输出与编译参数
+
+```sh
+# 对并发/不同配置必须同时隔离产物和生成源码目录。
+python3 -B autovec/build.py --suite tsvc --case s000 \
+  --output-root .dsh/runs/autovec-m1/build \
+  --generated-root .dsh/runs/autovec-m1/generated \
+  --march rv64gcv --mabi lp64d --extra-cflag=-mrvv-max-lmul=m1
+```
+
+`--output-root`（别名`--build-root`）不自动追加case/scalar子目录，也不自动改变`--generated-root`；每种配置应选择不同目录。默认策略不加extra flags；显式覆盖会记录到manifest，不与默认结果混合。
 
 ## TSVC 独立构建与运行
 
