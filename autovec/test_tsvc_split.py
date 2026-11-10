@@ -4,8 +4,9 @@ import tempfile
 import unittest
 from pathlib import Path
 from prepare_tsvc import prepare
+from source_paths import default_sources
 
-SOURCE = Path(__file__).resolve().parents[2] / 'compiler-experiment/benchmarks/TSVC_2'
+SOURCE = default_sources() / 'TSVC_2'
 
 
 class SplitTests(unittest.TestCase):

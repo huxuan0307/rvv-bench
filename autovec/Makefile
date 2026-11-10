@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := all
 PYTHON ?= python3
 GCC ?= /nfs/share/riscv-toolchain-gcc16.1.0-260715-nightly/bin/riscv64-unknown-linux-gnu-gcc
-SOURCES ?= ../../compiler-experiment/benchmarks
+SOURCES ?= $(shell $(PYTHON) -B -c 'from source_paths import default_sources; print(default_sources())')
 OPT ?= O3
 JOBS ?= 8
 NEMU ?= /nfs/home/huxuan/opt/bin/riscv64-nemu-interpreter

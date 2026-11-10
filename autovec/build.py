@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+from source_paths import default_sources
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
@@ -24,20 +25,32 @@ def run(command, log=None):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--sources', type=Path, default=ROOT.parent / 'compiler-experiment/benchmarks')
+    parser.add_argument('--sources', type=Path, default=default_sources())
     parser.add_argument('--gcc', default=DEFAULT_GCC)
+    parser.add_argument('--output-root', '--build-root', dest='output_root', type=Path,
+                        help='isolated output directory (defaults to legacy autovec/build/<opt>)')
+    parser.add_argument('--generated-root', type=Path,
+                        help='isolated generated source directory (defaults to legacy autovec/build/generated)')
+    parser.add_argument('--extra-cflag', action='append', default=[],
+                        help='additional compiler flag; repeat for multiple flags')
+    parser.add_argument('--march', default='rv64gcv', choices=['rv64gcv', 'rva23u64'])
+    parser.add_argument('--mabi', default='lp64d', choices=['lp64d'])
     parser.add_argument('--opt', choices=['O2', 'O3'], default='O3')
     parser.add_argument('--suite', choices=['all', 'tsvc', 'polybench', 'llvm'], default='all')
     parser.add_argument('--jobs', type=int, default=8)
     parser.add_argument('--case', help='Build one named test (requires --suite); keep its manifest separate')
     parser.add_argument('--scalar', action='store_true', help='validation reference; disable loop and SLP vectorization')
     args = parser.parse_args()
-    build = HERE / 'build' / (args.opt + ('-scalar' if args.scalar else ''))
+    if args.output_root is not None:
+        build = args.output_root.resolve()
+    else:
+        build = HERE / 'build' / (args.opt + ('-scalar' if args.scalar else ''))
     if args.case:
         if args.suite == 'all' or not re.fullmatch(r'[A-Za-z0-9_-]+', args.case):
             parser.error('--case requires an explicit --suite and a valid test name')
-        build = build / 'selected' / args.suite / args.case
-    generated = HERE / 'build' / 'generated'
+        if args.output_root is None:
+            build = build / 'selected' / args.suite / args.case
+    generated = (args.generated_root.resolve() if args.generated_root else HERE / 'build' / 'generated')
     build.mkdir(parents=True, exist_ok=True)
     import importlib
     specs = []
@@ -50,17 +63,24 @@ def main():
         if not specs:
             parser.error(f'Unknown {args.suite} test: {args.case}')
     prefix = args.gcc.removesuffix('gcc')
-    flags = [f'-{args.opt}', '-march=rv64gcv', '-mabi=lp64d', '-mcmodel=medany', '-ffreestanding', '-fno-builtin', '-fno-pie', '-fno-stack-protector', '-g', '-I', str(HERE)]
+    flags = [f'-{args.opt}', f'-march={args.march}', f'-mabi={args.mabi}', '-mcmodel=medany', '-ffreestanding', '-fno-builtin', '-fno-pie', '-fno-stack-protector', '-g', '-I', str(HERE)]
+    if args.extra_cflag:
+        flags += args.extra_cflag
     if args.scalar:
         flags += ['-fno-tree-loop-vectorize', '-fno-tree-slp-vectorize']
     runtime = build / 'av_runtime.o'
-    run([args.gcc, *flags, '-fno-tree-vectorize', '-c', HERE / 'av_runtime.c', '-o', runtime], build / 'runtime.log')
+    runtime_command = [str(x) for x in [args.gcc, *flags, '-fno-tree-vectorize', '-c', HERE / 'av_runtime.c', '-o', runtime]]
+    run(runtime_command, build / 'runtime.log')
     revisions = {}
     for name in ('TSVC_2', 'llvm-test-suite', 'PolyBenchC'):
         revisions[name] = {'commit': run(['git', '-C', args.sources / name, 'rev-parse', 'HEAD']).strip(),
                            'origin': run(['git', '-C', args.sources / name, 'remote', 'get-url', 'origin']).strip(),
                            'dirty': bool(run(['git', '-C', args.sources / name, 'status', '--porcelain']).strip())}
     metadata = {'sources': revisions, 'compiler': run([args.gcc, '--version']).splitlines()[0], 'gcc': args.gcc, 'flags': flags,
+                 'generated_root': str(generated), 'build_root': str(build),
+                 'runtime_command': runtime_command,
+                 'runtime_sources': [str(HERE / name) for name in ('av_runtime.c', 'av_runtime.h', 'tls.ld')],
+                 'link_inputs': [str(ROOT / 'thirdparty' / name) for name in ('link.ld', 'am-riscv64-xs.a', 'klib-riscv64-xs.a')],
                 'optimizer': run([args.gcc, *flags, '-Q', '--help=optimizers']),
                 'target': run([args.gcc, *flags, '-Q', '--help=target']), 'cases': []}
     (build / 'optimizer.txt').write_text(metadata['optimizer'])
