@@ -1,0 +1,17 @@
+# Local execution state, evidence, editors and generated products.
+/.dsh/
+/.vscode/
+/.tasks/splitted-rvv/generated/
+build/
+__pycache__/
+*.py[cod]
+/log
+/logs/
+/20241013/
+/fig/
+/fig.zip
+/summary/
+/single/libmvec/STATUS.zh.md
+/autovec/reports/cycle-comparison/ratios.csv
+/autovec/reports/cycle-comparison/ratios.json
+/autovec/reports/tsvc-gsim-1024-progress/
