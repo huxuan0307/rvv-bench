@@ -1,4 +1,6 @@
 #define VL s3
+/* Keep the index group fixed while m4 rotates data groups v8..v15. */
+#define INDEX v24
 
 #define t7 s4
 #define t8 s5
@@ -118,6 +120,17 @@ define(`m_whole_loadstore',`
 	m_emit(vs$2r, $1, bench_vs$2rv, T_A, m_mem8, vs$2r.v, v8, (t0))
 ')
 
+/* Indexed EEW describes the index, while data EEW is the current SEW.
+ * INDEX is fixed/nonoverlapping; T_I* restricts index EMUL to mf8..m8. */
+define(`m_indexed',`
+	m_emit($2ei8, mask, $1, bench_$2ei8v, T_I8, m_mem_index8, $2ei8.v, v8, (t0), INDEX)
+	m_emit($2ei16, mask, $1, bench_$2ei16v, T_I16, m_mem_index16, $2ei16.v, v8, (t0), INDEX)
+	m_emit($2ei32, mask, $1, bench_$2ei32v, T_I32, m_mem_index32, $2ei32.v, v8, (t0), INDEX)
+#if __riscv_v_elen >= 64
+	m_emit($2ei64, mask, $1, bench_$2ei64v, T_I64, m_mem_index64, $2ei64.v, v8, (t0), INDEX)
+#endif
+')
+
 define(`m_stride',
 	`m_mask($1, $2`'t3, shift2($*), t3)
 	m_mask( $1, $2`'x0, shift2($*), x0)
@@ -200,6 +213,32 @@ define(`m_loadstore',
 	m_mem 3
 .endm
 
+/* Initialize the entire index bank, including lanes beyond the active VL.
+ * Byte offsets 0,16,...,240 are bounded even for ei8 and preserve mod16
+ * of every effective address. Setup is outside the measured loop. */
+.macro m_mem_index eew
+	m_mem 0
+	csrr t8, vtype
+	vsetvli t7, x0, \eew, m8, ta, ma
+	vid.v INDEX
+	vand.vi INDEX, INDEX, 15
+	vsll.vi INDEX, INDEX, 4
+	vsetvl x0, VL, t8
+.endm
+.macro m_mem_index8
+	m_mem_index e8
+.endm
+.macro m_mem_index16
+	m_mem_index e16
+.endm
+.macro m_mem_index32
+	m_mem_index e32
+.endm
+#if __riscv_v_elen >= 64
+.macro m_mem_index64
+	m_mem_index e64
+.endm
+#endif
 
 .macro m_unimpl
 	li a0, -1
@@ -466,6 +505,11 @@ define(`m_bench_all',`
 
 	m_loadstore(stride, $1, T_E, se, v8, (t2))
 
+	m_indexed($1, vlux)
+	m_indexed($1, vlox)
+	m_indexed($1, vsux)
+	m_indexed($1, vsox)
+
 	m_loadstore(mask, $1, (T_A>> 4)&T_E, seg2e, v8, (t0))
 	m_loadstore(mask, $1, (T_A>> 8)&T_E, seg3e, v8, (t0))
 	m_loadstore(mask, $1, (T_A>> 8)&T_E, seg4e, v8, (t0))
@@ -536,7 +580,7 @@ define(`m_bench_all',`
 ')
 
 
-/* TODO: indexed load/stores */
+/* TODO: indexed segment load/stores */
 
 .data
 

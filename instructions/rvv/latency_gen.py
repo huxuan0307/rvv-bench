@@ -102,6 +102,9 @@ def classify(op: str) -> int | None:
     # never treat their .v suffix as a generic two-register arithmetic form.
     if re.fullmatch(r"v(?:l[1248]re(?:8|16|32|64)|s[1248]r)\.v", op):
         return None
+    # Indexed memory needs dedicated index/address dependency templates.
+    if re.fullmatch(r"v[ls][uo]xei(8|16|32|64)\.v", op):
+        return None
     # Carry-in forms have an architectural v0 carry operand. They need a
     # dedicated alternating-mask template and are not emitted by this slice.
     if op.startswith(("vmadc.", "vmsbc.")) and op.endswith((".vvm", ".vxm", ".vim")):

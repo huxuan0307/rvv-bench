@@ -51,6 +51,7 @@ build/rvv-%.elf: gen.S main.c config.h Makefile ../../config.mk
 		../../thirdparty/am-riscv64-xs.a \
 		../../thirdparty/klib-riscv64-xs.a
 	${OBJCOPY} -S --set-section-flags .bss=alloc,contents -O binary $@ $(@:.elf=.bin)
+	${DUMP} -d $@ > $(@:.elf=.dump)
 
 insn: $(INSNS:%=build/rvv-%.elf)
 

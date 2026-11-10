@@ -56,6 +56,13 @@
 #define T_E32  (T_A  & 0b1100110011001100111011111111) // EEW=32
 #define T_E64  (T_A  & 0b1000100010001000110011101111) // EEW=64
 
+/* Indexed data uses LMUL; only index EMUL=(index EEW/SEW)*LMUL
+ * is constrained here. Do not reuse ordinary memory EEW masks. */
+#define T_I8   (T_A & 0x0ffff731)
+#define T_I16  (T_A & 0x0effff73)
+#define T_I32  (T_A & 0x0ceffff7)
+#define T_I64  (T_A & 0x08ceffff)
+
 #define T_64   0b1000100010001000100000000000 // only SEW=64
 #define T_GSH  0b0100010001000100000000000000 // gash
 #define T_AES  0b0100010001000100000000000000 // SEW=32 128-bit element group
