@@ -7,18 +7,36 @@
 #define CASE_NAME "perf-" STR(FUNC)
 #define GUARD ((bits_t)0x5aa55aa55aa55aa5ULL)
 #define ROUNDS 10
+#ifndef N16_TRIM
+#define N16_TRIM 0
+#endif
+#if N16_TRIM
+#define MODES 3
+#define CONTROLS 0
+#else
 #define MODES 6
 #define CONTROLS 3
+#endif
 #define MAX_RECORDS (3*3*ROUNDS*(MODES+CONTROLS))
 #ifndef FORMAT_SMOKE
 #define FORMAT_SMOKE 0
 #endif
-#if FORMAT_SMOKE
+#ifndef N16_ONLY
+#define N16_ONLY 0
+#endif
+#if N16_TRIM
+#define WORK_COUNT 17
+#define PROFILE_NAME "n16-trim"
+#elif FORMAT_SMOKE
 #define WORK_COUNT 32
 #define PROFILE_NAME "format-smoke"
 #else
 #define WORK_COUNT DATA_COUNT
+#if N16_ONLY
+#define PROFILE_NAME "n16"
+#else
 #define PROFILE_NAME "full"
+#endif
 #endif
 _Static_assert(WORK_COUNT<=DATA_COUNT, "input corpus too short");
 static real_t x[WORK_COUNT] __attribute__((aligned(64)));
@@ -27,8 +45,13 @@ static real_t z[WORK_COUNT] __attribute__((aligned(64)));
 static struct { real_t before[GUARD_ELEMENTS]; real_t y[WORK_COUNT]; real_t after[GUARD_ELEMENTS]; } output __attribute__((aligned(64)));
 static volatile uint64_t result_sink;
 static uint64_t total_checks, failed;
+#if N16_TRIM
+static const kernel_fn funcs[MODES]={scalar_fast,direct_m1,direct_m2};
+static const char *names[MODES]={"scalar_fast","direct_m1","direct_m2"};
+#else
 static const kernel_fn funcs[MODES]={scalar_strict,scalar_fast,auto_m1,auto_m2,direct_m1,direct_m2};
 static const char *names[MODES+CONTROLS]={"scalar_strict","scalar_fast","auto_m1","auto_m2","direct_m1","direct_m2","rdcycle","empty","copy"};
+#endif
 struct record { uint64_t begin,end,checksum; unsigned n,k,mode,iteration,order; };
 static struct record records[MAX_RECORDS];
 static unsigned record_count;
@@ -64,9 +87,11 @@ static void verify(unsigned mode,size_t n) {
     for(size_t i=0;i<WORK_COUNT;++i) {
         ++total_checks; bits_t got=getbits(output.y[i]);
         if(i>=n) { if(got!=GUARD) fail("tail-canary",mode,n,i,got,GUARD); continue; }
+#if !N16_TRIM
         if(mode==7) { if(got!=GUARD) fail("empty-store",mode,n,i,got,GUARD); continue; }
         if(mode==8) { if(got!=input_bits[i]) fail("copy",mode,n,i,got,input_bits[i]); continue; }
         if(mode==6) { if(got!=GUARD) fail("rdcycle-store",mode,n,i,got,GUARD); continue; }
+#endif
         uint64_t a=ordered(got),b=ordered(reference_bits[i]);
         uint64_t distance=a>b?a-b:b-a;
         if(distance>ORACLE_LIMIT) fail("oracle",mode,n,i,got,reference_bits[i]);
@@ -75,9 +100,14 @@ static void verify(unsigned mode,size_t n) {
 static void record_sample(unsigned mode,unsigned n,unsigned k,unsigned iteration,unsigned order) {
     prepare_output(n);
     uint64_t begin,end;
+#if N16_TRIM
+    {
+        kernel_fn fn=funcs[mode];
+#else
     if(mode==6) { begin=cycle(); end=cycle(); }
     else {
         kernel_fn fn=mode<MODES?funcs[mode]:(mode==7?empty_kernel:copy_kernel);
+#endif
         begin=cycle();
         for(unsigned j=0;j<k;++j) fn(n,x,z,output.y);
         end=cycle();
@@ -105,7 +135,11 @@ __attribute__((noinline,noclone)) static int print_csv(uint64_t vlenb) {
         }
     if(failed) return 1;
     printf("LIBMVEC_CSV,2,%s,%llu,123456789,%s\n",STR(FUNC),(unsigned long long)(vlenb*8),PROFILE_NAME);
+#if N16_TRIM
+    printf("M,fast,direct1,direct2\n");
+#else
     printf("M,strict,fast,auto1,auto2,direct1,direct2,rdcycle,empty,copy\n");
+#endif
     printf("m,hash,b0,c0,b1,c1,b2,c2,b3,c3,b4,c4,b5,c5,b6,c6,b7,c7,b8,c8,b9,c9\n");
     for(unsigned base=0;base<record_count;base+=block) {
         printf("B,%u,%u\n",records[base].n,records[base].k);
@@ -137,7 +171,7 @@ int main(void) {
             size_t n=lengths_check[c]; if(n>WORK_COUNT) continue;
             prepare_output(n); funcs[m](n,x,z,output.y); verify(m,n);
         }
-        const size_t vl=(vlenb/sizeof(real_t)) * ((m==3||m==5)?2:1);
+        const size_t vl=(vlenb/sizeof(real_t)) * (N16_TRIM?(m==2?2:1):((m==3||m==5)?2:1));
         for(size_t n=vl-1;n<=vl+1 && n<=WORK_COUNT;++n) {
             prepare_output(n); funcs[m](n,x,z,output.y); verify(m,n);
         }
@@ -147,7 +181,11 @@ int main(void) {
     const unsigned lengths[]={16};
     const unsigned batches[]={1};
 #else
+#if N16_ONLY
+    const unsigned lengths[]={16};
+#else
     const unsigned lengths[]={16,128,1024};
+#endif
 #if PILOT_BATCH
     const unsigned batches[]={1,4,16};
 #else

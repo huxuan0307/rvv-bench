@@ -31,11 +31,15 @@ def main():
     parser.add_argument('--prefix',type=Path,default=DEFAULT_PREFIX)
     parser.add_argument('--output',type=Path)
     parser.add_argument('--case',action='append',choices=[*FUNCS,'abi-public'])
-    parser.add_argument('--profile',choices=['full','format-smoke'],default='full',
+    parser.add_argument('--profile',choices=['full','format-smoke','n16','n16-trim'],default='full',
                         help='format-smoke: log only, n=16 K=1, same ten rounds; not full acceptance')
     a=parser.parse_args(); prefix=a.prefix.resolve()
     if a.profile=='format-smoke' and a.case not in (None,['log']):
         parser.error('format-smoke only supports --case log')
+    if a.profile=='n16-trim' and a.case and 'abi-public' in a.case:
+        parser.error('n16-trim contains only the seven performance cases')
+    modes=['scalar_fast','direct_m1','direct_m2'] if a.profile=='n16-trim' else MODES
+    controls=[] if a.profile=='n16-trim' else ['rdcycle','empty','copy']
     if a.output:
         out=a.output.resolve(); out.mkdir(parents=True,exist_ok=False)
     else:
@@ -82,7 +86,7 @@ def main():
         sources=source_ids,oracle=oracle,
         support_archives={str(p.relative_to(ROOT)):identity(p) for p in [ROOT/'thirdparty/am-riscv64-xs.a',ROOT/'thirdparty/klib-riscv64-xs.a']},cases=[])
     manifest['profile']=a.profile
-    selected=a.case or (['log'] if a.profile=='format-smoke' else [*FUNCS,'abi-public'])
+    selected=a.case or (['log'] if a.profile=='format-smoke' else list(FUNCS) if a.profile in ('n16','n16-trim') else [*FUNCS,'abi-public'])
     def save(): (out/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
     save()
     for f in selected:
@@ -98,9 +102,9 @@ def main():
             else:
                 single=f.endswith('f'); binary_arg=f=='pow'; sew=32 if single else 64
                 defs=['-DFUNC='+f,f'-DFLOAT_INPUT={int(single)}',f'-DBINARY_INPUT={int(binary_arg)}']
-                for mode in MODES:
+                for mode in modes:
                     obj=dest/(mode+'.o'); objs.append(obj)
-                    flags=[*common,*defs,'-DKERNEL_NAME='+mode]
+                    flags=[*common,*defs,'-DKERNEL_NAME='+mode,f'-DN16_TRIM={int(a.profile=="n16-trim")}']
                     if mode.startswith('scalar'):
                         flags+=['-fno-tree-vectorize','-fno-tree-slp-vectorize','-ffast-math' if mode=='scalar_fast' else '-fno-fast-math']
                         source=source_here/'kernel-loop.c'
@@ -126,19 +130,20 @@ def main():
                         entry.setdefault('observed_vector_calls',{})[mode]=sorted(seen)
                     elif '_ZGV' in dis or not re.search(r'R_RISCV_CALL(?:_PLT)?\s+'+re.escape(f)+r'\b',dis):
                         raise RuntimeError(f'{mode} missing scalar call or unexpected vector clone')
-                obj=dest/'calibration.o'; objs.append(obj)
-                run([cc,*common,*defs,'-fno-fast-math','-fno-tree-vectorize','-fno-tree-loop-distribute-patterns','-c',source_here/'kernel-calibration.c','-o',obj],name+'/calibration')
+                if controls:
+                    obj=dest/'calibration.o'; objs.append(obj)
+                    run([cc,*common,*defs,'-fno-fast-math','-fno-tree-vectorize','-fno-tree-loop-distribute-patterns','-c',source_here/'kernel-calibration.c','-o',obj],name+'/calibration')
                 obj=dest/'main.o'; objs.append(obj)
                 run([cc,*common,*defs,'-fno-fast-math','-fno-tree-vectorize',f'-DPILOT_BATCH={int(f in ("log","exp"))}',
-                    f'-DFORMAT_SMOKE={int(a.profile=="format-smoke")}',
+                    f'-DFORMAT_SMOKE={int(a.profile=="format-smoke")}', f'-DN16_ONLY={int(a.profile in ("n16","n16-trim"))}', f'-DN16_TRIM={int(a.profile=="n16-trim")}',
                     '-DDATA_HEADER="'+str(out/'data'/(f+'.h'))+'"','-c',source_here/'perf.c','-o',obj],name+'/main')
                 batches=[1] if a.profile=='format-smoke' else ([1,4,16] if f in ('log','exp') else [1,4])
-                lengths=[16] if a.profile=='format-smoke' else [16,128,1024]
+                lengths=[16] if a.profile in ('format-smoke','n16','n16-trim') else [16,128,1024]
                 entry['required_markers']=[f'E,{name},pass']
-                entry['expected']=dict(wire_format='csv2',profile=a.profile,function=f,modes=MODES,lengths=lengths,batches=batches,
-                    phases=dict(first=1,warmup=2,steady=7),sample_count=6*len(lengths)*len(batches)*10,
-                    calibration_count=3*len(lengths)*len(batches)*10,calibration_modes=['rdcycle','empty','copy'],
-                    order_policy='rotate-all-9',min_checks=1000)
+                entry['expected']=dict(wire_format='csv2',profile=a.profile,function=f,modes=modes,lengths=lengths,batches=batches,
+                    phases=dict(first=1,warmup=2,steady=7),sample_count=len(modes)*len(lengths)*len(batches)*10,
+                    calibration_count=len(controls)*len(lengths)*len(batches)*10,calibration_modes=controls,
+                    order_policy='rotate-all-'+str(len(modes)+len(controls)),min_checks=1000)
             link=[cc,*common,'-nostdlib','-static','-no-pie',*objs,out/'runtime.o','-Wl,--wrap=_trm_init','-Wl,--build-id=none',
                 '-T',source_root/'autovec/tls.ld','-T',source_root/'thirdparty/link.ld','-Wl,-Map='+str(dest/'link.map'),'-Wl,-t',
                 ROOT/'thirdparty/am-riscv64-xs.a','-Wl,--start-group',ROOT/'thirdparty/klib-riscv64-xs.a','-lm','-lc','-lgcc','-Wl,--end-group','-o',elf]

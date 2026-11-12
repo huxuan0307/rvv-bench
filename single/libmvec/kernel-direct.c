@@ -24,5 +24,9 @@ void KERNEL_NAME(size_t n, const real_t *x, const real_t *z, real_t *y)
 #endif
         VSTORE(y+i,r,vl);
     }
+#if N16_TRIM
+    if (i<n) scalar_fast(n-i,x+i,z+i,y+i);
+#else
     if (i<n) scalar_strict(n-i,x+i,z+i,y+i);
+#endif
 }

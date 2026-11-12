@@ -56,7 +56,7 @@ def analyze(paths):
             if not case.get('measurement_valid'): raise ValueError('performance data not marked valid')
             function=case['name'].removeprefix('perf-')
             profile=case.get('profile','full')
-            if profile not in ('full','format-smoke'): raise ValueError('unknown workload profile')
+            if profile not in ('full','format-smoke','n16','n16-trim'): raise ValueError('unknown workload profile')
             if profile=='full': func_runs[function].add(run)
             thisbin=case.get('staged_sha256')
             if not thisbin: raise ValueError('missing measured BIN identity')
@@ -81,12 +81,14 @@ def analyze(paths):
                 if g['kind']!='math': continue
                 def lookup(kind,mode,k=None):
                     return bykey[(kind,mode,g['n'],g['k'] if k is None else k,g['phase'])]
-                g['speedup_vs_scalar_strict']=lookup('math','scalar_strict')['median_cycles']/g['median_cycles']
+                g['speedup_vs_scalar_strict']=(None if profile=='n16-trim' else
+                    lookup('math','scalar_strict')['median_cycles']/g['median_cycles'])
                 g['speedup_vs_scalar_fast']=lookup('math','scalar_fast')['median_cycles']/g['median_cycles']
-                g['empty_fraction']=lookup('control','empty')['median_cycles']/g['median_cycles']
+                g['empty_fraction']=(None if profile=='n16-trim' else
+                    lookup('control','empty')['median_cycles']/g['median_cycles'])
                 base=lookup('math',g['mode'],1)['cycles_per_element']
                 g['normalized_change_vs_k1']=g['cycles_per_element']/base-1
-                g['fixture_sensitive']=g['empty_fraction']>0.05 or (g['k']>1 and abs(g['normalized_change_vs_k1'])>0.10)
+                g['fixture_sensitive']=(g['empty_fraction'] is not None and g['empty_fraction']>0.05) or (g['k']>1 and abs(g['normalized_change_vs_k1'])>0.10)
             groups.extend(local)
     missing=sorted(FUNCTIONS-set(func_runs))
     replays={f:len(func_runs[f]) for f in ('log','exp')}

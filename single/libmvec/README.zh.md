@@ -6,6 +6,8 @@
 
 ## 脚本索引
 
+新增七函数算法、Nx/array正确性测试、周期汇总及历史脚本状态的统一入口见[工具使用索引](TOOLS.zh.md)。该索引列明输入、输出、运行入口与尚未完成参数化的历史工具。
+
 |脚本|用途|主要参数|
 |---|---|---|
 |[build.py](<build.py>)|冻结源码、生成oracle并构建BIN/ELF|`--prefix`、`--output`、可重复`--case`、`--profile full/format-smoke`|
@@ -20,6 +22,23 @@
 |[abi-probe.py](<abi-probe.py>)|生成/检查36公开ABI测试语料|`--check`、`--json`、`--out`|
 
 参数详情均可用`python3 -B 脚本 --help`查询。`compact_csv.py`与`runner_common.py`是共享模块，不是运行入口。
+
+## node033 与 run_emu.sh 后端
+
+`run.py gsim --backend run-emu --runner /nfs/home/huxuan/opt/bin/run_emu.sh --jobs 32`通过外部脚本调度。每个BIN仍在独立工作目录运行，DRAM输出相互隔离；元数据同时保存外部命令与真实emu命令。直接执行后端仍限制4并发，外部后端允许1–32。
+
+```sh
+# 从node033执行，MANIFEST、NEMU_RUN和OUTPUT使用新副本的绝对路径。
+python3 -B single/libmvec/node_campaign.py \
+  --manifest "$MANIFEST" --nemu-run "$NEMU_RUN" --output "$OUTPUT" \
+  --jobs 32 --timeout 48h \
+  --emu /nfs/share/huxuan/emus/emu-gsim-20261105-155351-409f429572 \
+  --reference /nfs/share/huxuan/refmodel/riscv64-nemu-interpreter-so-fixvfredusum
+```
+
+[node_campaign.py](<node_campaign.py>)先核对完整NEMU门禁，再运行ABI RTL、七个性能BIN、LOG/EXP独立复跑，逐阶段严格验收后才继续。7个性能BIN各含全部n/K/模式，因此32是并发上限，实际主批次最多7进程。任一失败停止后续阶段，不自动重试。
+
+`run_emu.sh`在只有超时的批次可能返回0；收集器额外检查逐例清单和真实进程记录，不能仅凭脚本退出码判通过。外部脚本日志和目标stdout/stderr分别保留；部分完整CSV行仍可诊断回收。长期运行应记录远端PID、独立后台存活，每30分钟采集进展，结束后再汇总，不重复启动同一轮。
 
 ## 工具与默认值
 

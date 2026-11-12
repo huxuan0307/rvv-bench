@@ -50,6 +50,12 @@ def _manifest_int(value, label, minimum=0):
     return value
 
 
+def mode_table(profile):
+    if profile == 'n16-trim':
+        return ('scalar_fast', 'direct_m1', 'direct_m2'), (), 'M,fast,direct1,direct2'
+    return MODES, CALIBRATION_MODES, MODE_HEADER
+
+
 def _plan(manifest_case, expected):
     function = expected.get('function')
     if not isinstance(function, str) or function not in FUNCTIONS:
@@ -60,11 +66,12 @@ def _plan(manifest_case, expected):
     if manifest_case.get('suite', 'performance') != 'performance':
         raise ValueError('csv2 supports only performance cases')
     profile = expected.get('profile', 'full')
-    if profile not in ('full', 'format-smoke'):
+    if profile not in ('full', 'format-smoke', 'n16', 'n16-trim'):
         raise ValueError('expected.profile: unsupported profile')
     if profile == 'format-smoke' and function != 'log':
         raise ValueError('format-smoke supports only log')
-    for key, wanted in (('modes', MODES), ('calibration_modes', CALIBRATION_MODES)):
+    modes, controls, mode_header = mode_table(profile)
+    for key, wanted in (('modes', modes), ('calibration_modes', controls)):
         if not isinstance(expected.get(key), list) or expected[key] != list(wanted):
             raise ValueError(f'expected.{key}: mode table mismatch')
     phases = expected.get('phases')
@@ -73,8 +80,9 @@ def _plan(manifest_case, expected):
         raise ValueError('expected.phases: must be first=1, warmup=2, steady=7')
     if _manifest_int(expected.get('rounds', ROUNDS), 'expected.rounds') != ROUNDS:
         raise ValueError('expected.rounds: must be 10')
-    if expected.get('order_policy', 'rotate-all-9') != 'rotate-all-9':
-        raise ValueError('expected.order_policy: must be rotate-all-9')
+    policy = 'rotate-all-' + str(len(modes) + len(controls))
+    if expected.get('order_policy', policy) != policy:
+        raise ValueError('expected.order_policy: must be ' + policy)
     dimensions = []
     for key in ('lengths', 'batches'):
         values = expected.get(key)
@@ -87,8 +95,8 @@ def _plan(manifest_case, expected):
         dimensions.append(values)
     lengths, batches = dimensions
     block_count = len(lengths) * len(batches)
-    for key, width in (('sample_count', len(MODES)),
-                       ('calibration_count', len(CALIBRATION_MODES))):
+    for key, width in (('sample_count', len(modes)),
+                       ('calibration_count', len(controls))):
         count = _manifest_int(expected.get(key), f'expected.{key}')
         if count != block_count * width * ROUNDS:
             raise ValueError(f'expected.{key}: inconsistent with dimensions')
@@ -158,8 +166,9 @@ def expand(text, manifest_case):
         raise ValueError('header vlen_bits must be a power-of-two multiple of 128')
     if _uint(header[4], 'header seed') != 123456789:
         raise ValueError('header seed must be 123456789')
-    raw, _ = take('M', 10)
-    if raw != MODE_HEADER:
+    modes, controls, mode_header = mode_table(profile)
+    raw, _ = take('M', 1 + len(modes) + len(controls))
+    if raw != mode_header:
         raise ValueError('CSV mode header mismatch')
     raw, _ = take('m', 22)
     if raw != COLUMN_HEADER:
@@ -170,7 +179,8 @@ def expand(text, manifest_case):
         f'seed=123456789 rounds=10 profile={profile} wire_format=csv2']
     data_rows = 0
     logical_records = 0
-    all_modes = MODES + CALIBRATION_MODES
+    modes, controls, mode_header = mode_table(profile)
+    all_modes = modes + controls
     for n in lengths:
         for k in batches:
             _, fields = take('B', 3)
@@ -185,7 +195,7 @@ def expand(text, manifest_case):
                 checksum = _uint(fields[2], 'D hash')
                 values = [_uint(value, f'D mode {mode_index} tuple {index}')
                           for index, value in enumerate(fields[3:])]
-                if mode_index < len(MODES) and any(value == 0 for value in values[1::2]):
+                if mode_index < len(modes) and any(value == 0 for value in values[1::2]):
                     raise ValueError('mathematical sample cycles must be positive')
                 block.append((raw, checksum, values))
                 data_rows += 1
@@ -199,7 +209,7 @@ def expand(text, manifest_case):
                     raw, checksum, values = block[mode_index]
                     begin, cycles = values[2*r:2*r + 2]
                     end = (begin + cycles) & U64_MAX
-                    tag = 'SAMPLE' if mode_index < len(MODES) else 'CALIBRATION'
+                    tag = 'SAMPLE' if mode_index < len(modes) else 'CALIBRATION'
                     canonical.append(
                         f'LIBMVEC_{tag} case={name} function={function} '
                         f'mode={all_modes[mode_index]} n={n} k={k} phase={phase} '
@@ -264,7 +274,8 @@ def recover(text, manifest_case):
         return result
     name, function, profile, lengths, batches, minimum_checks = _plan(
         manifest_case, expected)
-    all_modes = MODES + CALIBRATION_MODES
+    modes, controls, mode_header = mode_table(profile)
+    all_modes = modes + controls
     ansi = re.compile(r'\x1b\[[0-?]*[ -/]*[@-~]')
     pending = None
     stage = None
@@ -357,7 +368,7 @@ def recover(text, manifest_case):
             clear_header()
             continue
         if tag in ('M', 'm'):
-            wanted = MODE_HEADER if tag == 'M' else COLUMN_HEADER
+            wanted = mode_header if tag == 'M' else COLUMN_HEADER
             if stage != tag or raw != wanted:
                 issue(source_line, f'CSV {tag} header mismatch or unexpected header row')
                 clear_header()
@@ -398,11 +409,11 @@ def recover(text, manifest_case):
                 fields = fields_for(raw, 'D', 23)
                 mode = _uint(fields[1], 'D mode')
                 if mode >= len(all_modes):
-                    raise ValueError('D mode must be in [0, 8]')
+                    raise ValueError(f'D mode must be in [0, {len(all_modes)-1}]')
                 checksum = _uint(fields[2], 'D hash')
                 values = [_uint(value, f'D mode {mode} tuple {index}')
                           for index, value in enumerate(fields[3:])]
-                if mode < len(MODES) and any(value == 0 for value in values[1::2]):
+                if mode < len(modes) and any(value == 0 for value in values[1::2]):
                     raise ValueError('mathematical sample cycles must be positive')
                 if header is None or block is None:
                     raise ValueError('D requires a validated CSV header and B context')
@@ -422,7 +433,7 @@ def recover(text, manifest_case):
                                       ('steady', r - 3))
                 begin, cycles = values[2*r:2*r + 2]
                 result['records'].append({
-                    'record_type': 'sample' if mode < len(MODES) else 'calibration',
+                    'record_type': 'sample' if mode < len(modes) else 'calibration',
                     'case': name, 'suite': 'performance', 'function': function,
                     'mode': all_modes[mode], 'n': n, 'k': k, 'phase': phase,
                     'round': phase_round, 'order': (mode - r) % len(all_modes), 'r': r,

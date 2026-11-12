@@ -9,7 +9,7 @@ Examples (from the repository root)::
 
 ``run.py`` never writes into an existing output directory.  Every input BIN is
 copied to ``staging/`` and its SHA256 is checked against the manifest before and
-after the copy.  gsim launches the emulator directly (not through run_emu.sh) in
+after the copy.  gsim supports direct execution or an optional run_emu.sh backend in
 a per-case working directory with a per-case DRAMSim3 output directory.  NEMU
 runs in batch mode with the requested instruction budget.  A per-case timeout or
 SIGINT/SIGTERM interrupts the whole process group and records ``aborted``.
@@ -72,6 +72,8 @@ def build_parser():
 
     gsim = sub.add_parser('gsim', help='XiangShan gsim cycle run')
     add_common(gsim, DEFAULT_GSIM_TIMEOUT)
+    gsim.add_argument('--backend', choices=['direct', 'run-emu'], default='direct')
+    gsim.add_argument('--runner', type=Path, default=Path('/nfs/home/huxuan/opt/bin/run_emu.sh'))
     gsim.add_argument('--emu', type=Path,
                       help='explicit non-static gsim; default is the pinned '
                            '20261105 image, or newest non-static image if absent')
@@ -88,8 +90,9 @@ def build_parser():
 
 def validate_arguments(parser, args):
     if args.mode == 'gsim':
-        if not 1 <= args.jobs <= 4:
-            parser.error('gsim jobs must be between 1 and 4')
+        limit = 32 if getattr(args, 'backend', 'direct') == 'run-emu' else 4
+        if not 1 <= args.jobs <= limit:
+            parser.error(f'gsim jobs must be between 1 and {limit}')
         if not 0 <= args.seed <= common.U64_MAX:
             parser.error('seed must be an unsigned 64-bit integer')
     else:
@@ -175,6 +178,11 @@ def prepare(args):
                 f'DRAMSim3 Ini realpath is missing: {dram["realpath"]}')
         tools['dram_config'] = dram
         seed = args.seed
+        if getattr(args, 'backend', 'direct') == 'run-emu':
+            runner = args.runner.expanduser().resolve()
+            if not runner.is_file() or not os.access(runner, os.X_OK):
+                raise common.ManifestError(f'external runner is not executable: {runner}')
+            tools['runner'] = common.identity(runner)
     else:
         nemu = args.nemu.expanduser().resolve()
         tools['nemu'] = common.tool_identity(nemu, kind='nemu')
@@ -237,21 +245,25 @@ def prepare(args):
         'manifest': manifest_identity,
         'tools': tools,
         'runner_sources': {p.name: common.identity(p) for p in
-                           (HERE/'run.py', HERE/'runner_common.py', HERE/'collect.py', HERE/'compact_csv.py')},
+                           (HERE/'run.py', HERE/'runner_common.py', HERE/'collect.py', HERE/'compact_csv.py', HERE/'run_emu_backend.py')},
         'policy': {
             'jobs': args.jobs,
+            'backend': getattr(args, 'backend', 'direct'),
             'timeout': args.timeout,
             'timeout_seconds': args.timeout_seconds,
             'seed': seed,
             'max_instr': args.max_instr if args.mode == 'nemu' else None,
-            'smoke': args.mode == 'gsim' and not args.no_smoke,
-            'smoke_gate': 'strict-collector' if args.mode == 'gsim' and not args.no_smoke else None,
+            'smoke': args.mode == 'gsim' and not args.no_smoke and getattr(args, 'backend', 'direct') == 'direct',
+            'smoke_gate': 'strict-collector' if args.mode == 'gsim' and not args.no_smoke and getattr(args, 'backend', 'direct') == 'direct' else None,
             'diff': args.mode == 'gsim',
             'per_case_cwd': True,
             'per_case_dram_outdir': args.mode == 'gsim',
         },
         'cases': cases,
     }
+    if getattr(args, 'backend', 'direct') == 'run-emu':
+        import run_emu_backend
+        run_emu_backend.prepare(run, metadata, tools['runner']['realpath'])
     common.write_json(run / 'run-metadata.json', metadata)
     common.write_json(run / 'runner-state.json', {
         'schema_version': common.SCHEMA_VERSION, 'state': 'in_progress',
@@ -378,6 +390,9 @@ def _restore_signal_handlers(previous):
 
 
 def execute(config):
+    if config['metadata']['policy'].get('backend') == 'run-emu':
+        import run_emu_backend
+        return run_emu_backend.execute(config)
     registry = common.ProcessRegistry()
     previous = _install_signal_handlers(registry)
     selected = config['cases']

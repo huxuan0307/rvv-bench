@@ -499,6 +499,12 @@ def audit_case(manifest_case, meta_case, metadata, run, runner_state):
     doc['aborted'] = bool(result.get('aborted'))
     if result.get('command') != meta_case['command']:
         reasons.append('result.json command differs from the recorded metadata command')
+    if metadata['policy'].get('backend') == 'run-emu':
+        expected_proxy = ['--diff', metadata['tools']['reference']['realpath'], '-i', meta_case['staged_bin']]
+        if result.get('backend') != 'run-emu' or result.get('proxy_command') != expected_proxy:
+            reasons.append('external proxy execution receipt does not match the staged case/reference')
+        if runner_state == 'terminated' and result.get('external_status') != 'pass':
+            reasons.append('external per-case result is not pass')
     if result.get('cwd') != meta_case['workdir']:
         reasons.append('result.json cwd differs from the per-case working directory')
     if result.get('state') not in CASE_STATES:
@@ -605,6 +611,60 @@ def _validate_tool(identity_record, kind, issues):
             issues.append(f'tools.{kind}.{key} changed since the run')
 
 
+def audit_external_runner(run, metadata):
+    """Audit the external transport separately from the actual emulator command."""
+    issues = []
+    external = metadata.get('external_runner')
+    if not isinstance(external, dict):
+        return ['external_runner metadata is missing']
+    tools = metadata['tools']
+    _validate_tool(tools.get('runner'), 'runner', issues)
+    if external.get('runner') != tools.get('runner'):
+        issues.append('external runner identity differs from tools.runner')
+    proxy = external.get('proxy')
+    _validate_tool(proxy, 'proxy', issues)
+    if not isinstance(proxy, dict) or not isinstance(proxy.get('path'), str):
+        return issues + ['external proxy identity is missing']
+    if not Path(proxy['path']).resolve().is_relative_to(run.resolve()):
+        issues.append('external proxy is outside the run directory')
+    if not external.get('hostname'):
+        issues.append('external execution hostname is missing')
+    for key in ('source', 'common_source'):
+        if key in external:
+            _validate_tool(external[key], 'external_' + key, issues)
+    expected = [tools.get('runner', {}).get('realpath'), '-e', proxy['path'],
+                '-r', tools['reference']['realpath'], '-t', str(run / 'staging'),
+                '-j', str(metadata['policy']['jobs']), '--timeout', metadata['policy']['timeout'],
+                '-o', str(run / 'external-logs'), '--show-cmd']
+    if external.get('command') != expected:
+        issues.append('external runner command differs from the required transport command')
+    state = _json(run / 'runner-state.json') if (run / 'runner-state.json').is_file() else {}
+    receipt_path = run / 'external-result.json'
+    if state.get('state') == 'terminated':
+        if not receipt_path.is_file():
+            issues.append('external runner final receipt is missing')
+        else:
+            receipt = _json(receipt_path)
+            if (receipt.get('returncode') != 0 or receipt.get('command') != expected or
+                    receipt.get('issues') or receipt.get('aborted') or receipt.get('timed_out') or
+                    receipt.get('launch_error')):
+                issues.append('external runner receipt failed or command mismatched')
+        # run_emu.sh returns zero even for timeout-only batches: audit each list.
+        directories = [p for p in (run / 'external-logs').iterdir() if p.is_dir()] if (run / 'external-logs').is_dir() else []
+        if len(directories) != 1:
+            issues.append('external log directory is missing or ambiguous')
+        else:
+            logdir = directories[0]
+            lists = {}
+            for status in ('pass', 'fail', 'timeout'):
+                path = logdir / ('.' + status + '_list')
+                lists[status] = path.read_text().splitlines() if path.is_file() else []
+            names = [c['name'] for c in metadata['cases']]
+            if sorted(lists['pass']) != sorted(names) or lists['fail'] or lists['timeout']:
+                issues.append('external per-case completion lists do not show every case passed exactly once')
+    return issues
+
+
 def audit_run(run, metadata, manifest):
     issues = []
     tools = metadata.get('tools')
@@ -630,8 +690,14 @@ def audit_run(run, metadata, manifest):
     if not isinstance(policy, dict):
         raise ValueError('run-metadata.json policy must be an object')
     jobs = policy.get('jobs')
-    if type(jobs) is not int or jobs < 1 or jobs > (4 if metadata['mode'] == 'gsim' else 64):
+    backend = policy.get('backend', 'direct')
+    if backend not in ('direct', 'run-emu') or (backend == 'run-emu' and metadata['mode'] != 'gsim'):
+        issues.append('policy.backend is invalid for this mode')
+    maximum_jobs = 32 if backend == 'run-emu' else (4 if metadata['mode'] == 'gsim' else 64)
+    if type(jobs) is not int or jobs < 1 or jobs > maximum_jobs:
         issues.append('policy.jobs is outside the allowed range')
+    if backend == 'run-emu':
+        issues.extend(audit_external_runner(run, metadata))
     try:
         expected_timeout = common.parse_duration(policy.get('timeout'))
     except ValueError:

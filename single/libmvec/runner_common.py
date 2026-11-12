@@ -467,16 +467,18 @@ def expected_plan(entry, suite, name):
         if name != 'perf-' + function:
             raise ManifestError(
                 f'{name}: performance case name must be perf-{function}')
-        modes = expected.get('modes')
-        if not isinstance(modes, list) or list(modes) != list(MODES):
-            raise ManifestError(
-                f'{name}: expected.modes must be {list(MODES)!r}')
         profile = expected.get('profile', 'full')
-        if profile not in ('full', 'format-smoke'):
+        if profile not in ('full', 'format-smoke', 'n16', 'n16-trim'):
             raise ManifestError(f'{name}: unknown profile {profile!r}')
+        wanted_modes = ('scalar_fast', 'direct_m1', 'direct_m2') if profile == 'n16-trim' else MODES
+        wanted_controls = () if profile == 'n16-trim' else CALIBRATION_MODES
+        wanted_policy = 'rotate-all-' + str(len(wanted_modes) + len(wanted_controls))
+        modes = expected.get('modes')
+        if not isinstance(modes, list) or modes != list(wanted_modes):
+            raise ManifestError(f'{name}: expected.modes must be {list(wanted_modes)!r}')
         if profile == 'format-smoke' and function != 'log':
             raise ManifestError('format-smoke is restricted to log')
-        wanted_lengths = [16] if profile == 'format-smoke' else list(LENGTHS)
+        wanted_lengths = [16] if profile in ('format-smoke', 'n16', 'n16-trim') else list(LENGTHS)
         lengths = expected.get('lengths')
         if not isinstance(lengths, list) or list(lengths) != wanted_lengths:
             raise ManifestError(
@@ -491,22 +493,22 @@ def expected_plan(entry, suite, name):
         if phases != PHASES or any(type(value) is not int for value in phases.values()):
             raise ManifestError(f'{name}: expected.phases must be {PHASES!r}')
         policy = expected.get('order_policy')
-        if policy != ORDER_POLICY:
+        if policy != wanted_policy:
             raise ManifestError(
-                f'{name}: expected.order_policy must be {ORDER_POLICY!r}')
+                f'{name}: expected.order_policy must be {wanted_policy!r}')
         calibration_modes = expected.get('calibration_modes')
-        if list(calibration_modes or []) != list(CALIBRATION_MODES):
+        if not isinstance(calibration_modes, list) or calibration_modes != list(wanted_controls):
             raise ManifestError(
                 f'{name}: expected.calibration_modes must be '
-                f'{list(CALIBRATION_MODES)!r}')
+                f'{list(wanted_controls)!r}')
         rounds = sum(PHASES.values())
         sample_count = _int(expected.get('sample_count'),
                             f'{name}: expected.sample_count', minimum=1)
-        derived = len(MODES) * len(lengths) * len(batches) * rounds
+        derived = len(wanted_modes) * len(lengths) * len(batches) * rounds
         if sample_count != derived:
             raise ManifestError(
                 f'{name}: expected.sample_count {sample_count} != derived {derived}')
-        calibration_count = len(CALIBRATION_MODES) * len(lengths) * len(batches) * rounds
+        calibration_count = len(wanted_controls) * len(lengths) * len(batches) * rounds
         if 'calibration_count' in expected and expected['calibration_count'] != calibration_count:
             raise ManifestError(
                 f'{name}: expected.calibration_count must be {calibration_count}')
@@ -519,10 +521,10 @@ def expected_plan(entry, suite, name):
         wire = expected.get('wire_format', 'kv1')
         if wire not in ('kv1', 'csv2'):
             raise ManifestError(f'{name}: unsupported wire format {wire!r}')
-        return {'wire_format': wire, 'profile': profile, 'function': function, 'modes': list(MODES),
-                'calibration_modes': list(CALIBRATION_MODES),
+        return {'wire_format': wire, 'profile': profile, 'function': function, 'modes': list(wanted_modes),
+                'calibration_modes': list(wanted_controls),
                 'lengths': list(lengths), 'batches': list(batches),
-                'phases': dict(PHASES), 'order_policy': ORDER_POLICY,
+                'phases': dict(PHASES), 'order_policy': wanted_policy,
                 'rounds': rounds, 'sample_count': sample_count,
                 'calibration_count': calibration_count,
                 'min_checks': min_checks, 'abi_symbols': []}
