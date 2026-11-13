@@ -10,9 +10,28 @@ import subprocess
 
 def sha(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 
+def audit_calls(disassembly, function, mode, interface, recorded=None):
+    """Check real relocations and reject calls through the wrong interface."""
+    calls=set(re.findall(r'R_RISCV_CALL(?:_PLT)?\s+([A-Za-z_]\w*)',disassembly))
+    vector={s for s in calls if s.startswith('_ZGV') or re.fullmatch(r'\w+vec_m[12]',s)}
+    if mode.startswith('scalar'):
+        return function in calls and not vector, sorted(calls)
+    kind='vv' if function=='pow' else 'v'
+    nx=lambda n: f'_ZGV{n}Nx{kind}_{function}'
+    expected=(function+'vec_'+mode[-2:] if mode.startswith('direct') and interface=='array'
+              else nx(mode[-1]))
+    allowed={expected}
+    if mode=='auto_m2': allowed.add(nx('1'))
+    valid=expected in calls and vector <= allowed
+    if recorded is not None: valid=valid and sorted(vector)==sorted(recorded)
+    return valid, sorted(vector)
+
+
 def verify(manifest):
     manifest=Path(manifest).resolve();root=manifest.parent;doc=json.loads(manifest.read_text())
     tools=doc['toolchain']['tools']; checks=[]
+    interface=doc.get('direct_interface','nx')
+    if interface not in ('nx','array'): raise ValueError('unknown direct_interface: '+str(interface))
     def check(name,condition,detail=None):
         checks.append(dict(name=name,passed=bool(condition),detail=detail))
     def run(tool,args):
@@ -61,10 +80,14 @@ def verify(manifest):
             symbols={m[2]:int(m[1],16) for m in re.finditer(r'^([0-9a-f]+)\s+\w\s+(\w+)$',syms,re.M)}
             for var in ('x','z','output'):
                 check(name+' '+var+' 64-byte aligned',var in symbols and symbols[var]%64==0)
-            for mode,calls in case['observed_vector_calls'].items():
+            function=case['expected']['function']
+            recorded=case['observed_vector_calls']
+            for mode in case['expected']['modes']:
                 obj=root/name/(mode+'.o'); od=run('objdump',['-dr',obj])
-                actual=sorted(set(re.findall(r'\b_ZGV\w+',od)))
-                check(name+' '+mode+' calls',actual==calls,actual)
+                calls=recorded.get(mode) if not mode.startswith('scalar') else None
+                valid,actual=audit_calls(od,function,mode,interface,calls)
+                if not mode.startswith('scalar') and calls is None: valid=False
+                check(name+' '+mode+' calls',valid,actual)
     return dict(schema_version=1,manifest=str(manifest),manifest_sha256=sha(manifest),
         status='passed' if all(x['passed'] for x in checks) else 'failed',checks=checks,
         total=len(checks),failed=sum(not x['passed'] for x in checks))

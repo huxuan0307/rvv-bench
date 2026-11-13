@@ -9,7 +9,13 @@
 #define ADD(a,b) F(vfadd_vv)(a,b,vl)
 #define FMAC(a,b,c) F(vfmadd_vv)(a,b,c,vl)
 #define FMAF(a,b,c) F(vfmadd_vf)(a,b,c,vl)
+#define SIX_CAT_(a,b) a##b
+#define SIX_CAT(a,b) SIX_CAT_(a,b)
+#ifdef SIXMATH_COLD_DISPATCH
+static __attribute__((noinline,noclone,riscv_vector_cc)) FV SIX_CAT(CORE,_cold)(FV a, size_t vl){
+#else
 static __attribute__((always_inline)) inline FV CORE(FV a, size_t vl){
+#endif
   UV bits=FU(a);
   UV ab=U(vand_vx)(bits,UINT64_C(0x7fffffffffffffff),vl);
   BV cold=UGE(ab,UINT64_C(0x4080000000000000),vl);
@@ -45,7 +51,40 @@ static __attribute__((always_inline)) inline FV CORE(FV a, size_t vl){
   }
   return result;
 }
+
+#ifdef SIXMATH_COLD_DISPATCH
+static __attribute__((always_inline)) inline FV CORE(FV a, size_t vl){
+#ifdef SIXMATH_HOT_LIFETIME
+  __asm__ volatile("" : "+vr"(a));
+#endif
+  UV bits=FU(a);
+  UV ab=U(vand_vx)(bits,UINT64_C(0x7fffffffffffffff),vl);
+  BV cold=UGE(ab,UINT64_C(0x4080000000000000),vl);
+  BV tiny=ULT(ab,UINT64_C(0x3c90000000000000),vl);
+  BV anycold=M(vmor_mm)(cold,tiny,vl);
+  if(__builtin_expect(M(vfirst_m)(anycold,vl)>=0,0))
+    return SIX_CAT(CORE,_cold)(a,vl);
+  FV work=a;
+  /* The installed scalar ELF fuses InvLn2N*x+Shift into one fmadd. */
+  FV kd=FMAF(work,expvec_data.invln2N,F(vfmv_v_f)(expvec_data.shift,vl));UV ki=FU(kd);
+  kd=F(vfsub_vf)(kd,expvec_data.shift,vl);
+  FV r=FMAF(kd,expvec_data.negln2hiN,work);
+  r=FMAF(kd,expvec_data.negln2loN,r);
+  UV idx=U(vsll_vx)(U(vand_vx)(ki,127,vl),4,vl);
+  UV tailbits=GATHER(expvec_data.tab,idx,vl);
+  UV scale=GATHER(expvec_data.tab+1,idx,vl);
+  scale=U(vadd_vv)(scale,U(vsll_vx)(ki,45,vl),vl);
+  FV tail=UF(tailbits),s=UF(scale),r2=MUL(r,r);
+  FV left=FMAF(r,expvec_data.poly[1],F(vfmv_v_f)(expvec_data.poly[0],vl));
+  FV right=FMAF(r,expvec_data.poly[3],F(vfmv_v_f)(expvec_data.poly[2],vl));
+  FV tmp=FMAC(r2,left,ADD(tail,r));tmp=FMAC(MUL(r2,r2),right,tmp);
+  FV result=FMAC(s,tmp,s);
+  return result;
+}
+#endif
 #include "unary_entries.inc.h"
+#undef SIX_CAT_
+#undef SIX_CAT
 #undef VOP_
 #undef VOP
 #undef F

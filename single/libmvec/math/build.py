@@ -21,6 +21,10 @@ def main():
     ap.add_argument('--baseline',action='store_true',help='retain original log inline cold paths')
     ap.add_argument('--lto',action='store_true')
     ap.add_argument('--log-hot-lifetime',action='store_true',help='isolate log hot operand lifetime after integer dispatch')
+    ap.add_argument('--sixmath-cold-dispatch',action='store_true',help='experimental six-function cold-path isolation')
+    ap.add_argument('--sixmath-hot-lifetime',action='store_true',help='experimental hot input lifetime isolation')
+    ap.add_argument('--trig-uniform',action='store_true',help='experimental all-direct chunk range-reduction bypass')
+    ap.add_argument('--sin-uniform',action='store_true',help='enable all-direct bypass only for sin')
     ap.add_argument('--output',type=Path)
     ap.add_argument('--prefix',type=Path,default=PREFIX)
     a=ap.parse_args()
@@ -29,6 +33,9 @@ def main():
     flags=[f for f in BASE if f!='-fno-lto']+['-flto' if a.lto else '-fno-lto']
     if a.baseline: flags+=['-DLOGVEC_BASELINE=1']
     if a.log_hot_lifetime: flags+=['-DLOGVEC_HOT_LIFETIME=1']
+    if a.sixmath_cold_dispatch: flags+=['-DSIXMATH_COLD_DISPATCH=1']
+    if a.sixmath_hot_lifetime: flags+=['-DSIXMATH_HOT_LIFETIME=1']
+    if a.trig_uniform: flags+=['-DSIXMATH_TRIG_UNIFORM=1']
     out=a.output.resolve() if a.output else HERE/'build'
     out.mkdir(parents=True,exist_ok=a.output is None)
     commands=[]
@@ -46,7 +53,8 @@ def main():
     for name in stem:
         obj=out/(name+'.o');objects.append(obj)
         contract='off' if name in ('sinvec','cosvec') else 'fast'
-        run([cc,*flags,'-ffp-contract='+contract,'-c',HERE/(name+'.c'),'-o',obj],name+'.compile')
+        local_flags=['-DSIXMATH_TRIG_UNIFORM=1'] if a.sin_uniform and name=='sinvec' else []
+        run([cc,*flags,*local_flags,'-ffp-contract='+contract,'-c',HERE/(name+'.c'),'-o',obj],name+'.compile')
         run([prefix/'bin/riscv64-unknown-linux-gnu-objdump','-dr',obj],name+'.disassembly')
         run([prefix/'bin/riscv64-unknown-linux-gnu-readelf','-A','-sW',obj],name+'.attributes')
     # 通过临时名字创建新archive，防止ar保留旧成员。

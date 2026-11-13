@@ -7,6 +7,17 @@
 #ifndef TRACE_K
 #define TRACE_K 1
 #endif
+#ifndef TRACE_OFFSET
+#define TRACE_OFFSET 0
+#endif
+_Static_assert(TRACE_OFFSET+16 <= sizeof(input_bits)/sizeof(input_bits[0]),
+               "trace input slice exceeds frozen data");
+#ifdef TRACE_INDICES
+static const unsigned trace_indices[16]={TRACE_INDICES};
+#define TRACE_INDEX(i) trace_indices[i]
+#else
+#define TRACE_INDEX(i) (TRACE_OFFSET+(i))
+#endif
 extern int printf_(const char *, ...);
 static real_t x[16] __attribute__((aligned(64)));
 static real_t z[16] __attribute__((aligned(64)));
@@ -26,7 +37,8 @@ __attribute__((noinline,noclone)) void trace_region(void) {
 }
 int main(void) {
     for(unsigned i=0;i<16;++i) {
-        bits_t a=input_bits[i],b=second_bits[i];
+        if(TRACE_INDEX(i)>=DATA_COUNT) return 2;
+        bits_t a=input_bits[TRACE_INDEX(i)],b=second_bits[TRACE_INDEX(i)];
         __builtin_memcpy(&x[i],&a,sizeof a); __builtin_memcpy(&z[i],&b,sizeof b);
     }
     /* Two untimed calls warm the selected implementation only. */
@@ -34,7 +46,7 @@ int main(void) {
     uint64_t begin=cycles(); trace_region(); uint64_t end=cycles();
     unsigned failed=0;
     for(unsigned i=0;i<16;++i) {
-        uint64_t a=ordered(bits(y[i])),b=ordered(reference_bits[i]);
+        uint64_t a=ordered(bits(y[i])),b=ordered(reference_bits[TRACE_INDEX(i)]);
         if((a>b?a-b:b-a)>ORACLE_LIMIT) ++failed;
         sink^=bits(y[i]);
     }

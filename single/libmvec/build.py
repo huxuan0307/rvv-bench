@@ -26,6 +26,10 @@ def identity(p):
     p=Path(p).resolve(); s=p.stat()
     return dict(path=str(p),size=s.st_size,mtime_ns=s.st_mtime_ns,sha256=sha(p))
 
+def direct_symbol(function, mode, interface):
+    if interface=='array': return function+'vec_'+mode[-2:]
+    return f'_ZGV{mode[-1]}Nx'+('vv' if function=='pow' else 'v')+'_'+function
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--prefix',type=Path,default=DEFAULT_PREFIX)
@@ -35,6 +39,8 @@ def main():
                         help='format-smoke: log only, n=16 K=1, same ten rounds; not full acceptance')
     parser.add_argument('--math-archive',type=Path,help='explicit replacement math archive; retain installed scalar libm')
     parser.add_argument('--lto',action='store_true',help='enable LTO in benchmark translation units and final link')
+    parser.add_argument('--direct-interface',choices=['nx','array'],default='nx',
+                        help='direct kernels call Nx vector ABI (default) or array ABI')
     a=parser.parse_args(); prefix=a.prefix.resolve()
     if a.math_archive and not a.math_archive.is_file(): parser.error('math archive does not exist')
     if a.profile=='format-smoke' and a.case not in (None,['log']):
@@ -71,6 +77,14 @@ def main():
     allsyms=run([tools['nm'],'-g','--defined-only',libs['libmvec.a']],'libmvec-symbols')
     public_symbols=sorted(set(re.findall(r'\b(_ZGV\w+)\s*$',allsyms,re.M))-{x for x in re.findall(r'\b(_ZGV\w+)\s*$',allsyms,re.M) if x.endswith('_len')})
     if len(public_symbols)!=36: raise RuntimeError(f'expected 36 public symbols, got {len(public_symbols)}')
+    selected=a.case or (['log'] if a.profile=='format-smoke' else list(FUNCS) if a.profile in ('n16','n16-trim') else [*FUNCS,'abi-public'])
+    if a.direct_interface=='array':
+        archive=a.math_archive.resolve() if a.math_archive else libs['libmvec.a']
+        array_syms=run([tools['nm'],'-g','--defined-only',archive],'array-symbols')
+        available=set(re.findall(r'\b([A-Za-z_]\w*)\s*$',array_syms,re.M))
+        required={f+'vec_'+mode for f in selected if f!='abi-public' for mode in ('m1','m2')}
+        missing=sorted(required-available)
+        if missing: raise RuntimeError(f'array interface symbols missing from {archive}: {", ".join(missing)}')
     version=run([cc,'--version'],'compiler-version').splitlines()[0]
     oracle=generate(out/'data')
     paths=list(HERE.glob('*.c'))+list(HERE.glob('*.h'))+list(HERE.glob('*.py'))+[HERE/'PROTOCOL.md',ROOT/'autovec/av_runtime.c',ROOT/'autovec/av_runtime.h',ROOT/'single/veclibm-runtime.c',ROOT/'autovec/tls.ld',ROOT/'thirdparty/link.ld']
@@ -94,9 +108,9 @@ def main():
         for name in ('entry_rne','tls_anchor'):
             run([cc,*common,'-fno-fast-math','-c',HERE/(name+'.c'),'-o',out/(name+'.o')],name)
     manifest['profile']=a.profile
+    manifest['direct_interface']=a.direct_interface
     manifest['lto']=a.lto
     if a.math_archive: manifest['math_archive']=identity(a.math_archive)
-    selected=a.case or (['log'] if a.profile=='format-smoke' else list(FUNCS) if a.profile in ('n16','n16-trim') else [*FUNCS,'abi-public'])
     def save(): (out/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
     save()
     for f in selected:
@@ -124,6 +138,10 @@ def main():
                         if a.lto: flags+=['-fno-lto']
                         lmul=mode[-2:]; flags+=['-ffast-math','-fopenmp-simd','-DAUTO_VECTOR=1','-mrvv-max-lmul='+lmul,'-fopt-info-vec-all='+str(dest/(mode+'.vec.txt'))]
                         source=source_here/'kernel-loop.c'
+                    elif a.direct_interface=='array':
+                        sym=direct_symbol(f,mode,'array')
+                        flags+=['-fno-fast-math','-fno-tree-vectorize','-DARRAY_SYMBOL='+sym]
+                        source=source_here/'kernel-array.c'
                     else:
                         lmul=mode[-2:]; sym=f'_ZGV{lmul[-1]}Nx'+('vv' if binary_arg else 'v')+'_'+f
                         flags+=['-fno-fast-math','-fno-tree-vectorize',f'-DVECTOR_T=vfloat{sew}{lmul}_t','-DVECTOR_SYMBOL='+sym,
@@ -134,9 +152,10 @@ def main():
                     if a.lto:
                         continue  # Inspect actual calls after the final LTO link.
                     if mode.startswith(('auto','direct')):
-                        expected=f'_ZGV{mode[-1]}Nx'+('vv' if binary_arg else 'v')+'_'+f
-                        if expected not in dis: raise RuntimeError(f'{mode} missing actual call {expected}')
-                        seen=set(re.findall(r'_ZGV\w+',dis))
+                        expected=direct_symbol(f,mode,a.direct_interface if mode.startswith('direct') else 'nx')
+                        if not re.search(r'R_RISCV_CALL(?:_PLT)?\s+'+re.escape(expected)+r'\b',dis):
+                            raise RuntimeError(f'{mode} missing actual call {expected}')
+                        seen=set(re.findall(r'_ZGV\w+|\b\w+vec_m[12]\b',dis))
                         allowed={expected}
                         # GCC may vectorize the m2 remainder with a real m1 clone.
                         # Record it rather than mislabeling a valid epilogue as m2-only.
@@ -186,11 +205,17 @@ def main():
             linked_disassembly=run([tools['objdump'],'-d',elf],name+'/disassembly')
             if a.lto and f!='abi-public':
                 # Record the real final-code result, including clones/internalization.
-                entry['lto_vector_call_sites']={sym:len(re.findall(r'\b(?:jal|j)\s+[^\n]*<'+re.escape(sym)+r'(?:[.][^>]*)?>',linked_disassembly))
-                    for sym in (f'_ZGV1Nx'+('vv' if binary_arg else 'v')+'_'+f,
-                                f'_ZGV2Nx'+('vv' if binary_arg else 'v')+'_'+f)}
-                if not any(entry['lto_vector_call_sites'].values()):
-                    raise RuntimeError('LTO final image has no auditable vector call; inspect before accepting')
+                nx_symbols=[f'_ZGV{i}Nx'+('vv' if binary_arg else 'v')+'_'+f for i in (1,2)]
+                array_symbols=[f+'vec_m'+str(i) for i in (1,2)]
+                audited=nx_symbols if a.direct_interface=='nx' else array_symbols + (nx_symbols if 'auto_m1' in modes else [])
+                entry['lto_vector_call_sites']={sym:len(re.findall(r'\b(?:jal|j)\s+[^\n]*<'+re.escape(sym)+r'(?:[.][^>]*)?>',linked_disassembly)) for sym in audited}
+                if a.direct_interface=='nx':
+                    if not any(entry['lto_vector_call_sites'].values()):
+                        raise RuntimeError('LTO final image has no auditable vector call; inspect before accepting')
+                elif not all(entry['lto_vector_call_sites'][sym] for sym in array_symbols):
+                    raise RuntimeError('LTO final image missing auditable direct array calls')
+                elif 'auto_m1' in modes and not any(entry['lto_vector_call_sites'][sym] for sym in nx_symbols):
+                    raise RuntimeError('LTO final image has no auditable auto Nx call')
             run([tools['objcopy'],'-S','--set-section-flags','.bss=alloc,contents','-O','binary',elf,binary],name+'/objcopy')
             entry.update(status='built',sha256=sha(binary),elf_sha256=sha(elf),binary_size=binary.stat().st_size)
         except Exception as exc:
