@@ -138,7 +138,7 @@ python3 single/run_veclibm.py \
 - `long double` 由构建期断言限定为 binary128 / 113 位有效精度。使用 [数学重载兼容头](<veclibm-accuracy/include/math.h>) 补足 `-nostdinc++` 下缺失的 `cos(long double)`、`sin(long double)`、`log2(long double)` 标准重载，转发到真实 `cosl/sinl/log2l`，避免静默降精度。
 - klib 不支持 `%L` 格式，所以仅跳过含该格式的整次诊断 `printf`；普通诊断、特殊值位模式输出仍保留。适配运行时额外输出每条 ULP 断言及失败位模式；未屏蔽数值比较。
 - 上游 [test_infra.cpp:1028–1029](<../thirdparty/veclibm/test/src/test_infra.cpp#L1028-L1029>) 的二维 unit-stride 填充存在 `x[cnt++]` 后写 `y[cnt]` 的错位 / 越界。仅在生成副本中修复为 `x[cnt]`、`y[cnt]`、再 `++cnt`。上游源码不修改，阈值不修改，manifest 记录该适配。
-- 141 项均实际运行，但上游并非每个 `TEST` 都有断言：**131 项合计执行 467 次断言**；8 个 `show_special` 用例及 `sincosI.test`、`sincospiI.test` 原本只有诊断计算，无 `EXPECT`，仅能判定可运行，不能称为精度通过。没有为这 10 项擅自发明阈值。
+- 上游部分测试只有诊断计算，没有 `EXPECT`；这些测试只能判定可运行，不能称为精度通过。不得为缺失断言擅自发明阈值。
 - 本次结果说明所选快速采样点上的断言通过，不等于穷尽输入域，也不把 NEMU 的 cycle 计数当作硬件性能结论。
 
 ## 运行证据与失败判定
@@ -147,7 +147,7 @@ python3 single/run_veclibm.py \
 
 功能成功必须同时满足：进程成功退出、NEMU `GOOD TRAP`、所需终态标记存在、NEMU 整程序计数可解析、无错误 / 断言失败 / 超时 / 预算中断。单独出现 `GOOD TRAP` 不足以通过；`failed=0` 是合法成功计数，非零失败计数会拒收。
 
-本次实测数据和各项索引见 [验证报告](<VECLIBM_VALIDATION.md>)。运行日志保留在构建目录；若需要长期归档，应一同保存 manifest、BIN 和结果目录。
+具体运行结果、实测数据和证据索引保存在任务目录，不在源码说明中维护。长期归档应同时保存 manifest、BIN 和结果目录；历史记录不代表重新执行或完成当前配置验证。
 
 主机侧适配器 / 解析器回归测试：
 
