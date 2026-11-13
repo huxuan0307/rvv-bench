@@ -33,6 +33,16 @@ python3 -B single/libmvec/build.py --case log --profile n16 \
 
 同 SHA `409f429572` 的 Verilator 波形确认原 m2 每次入口 `vsetivli zero,0,e64,m2` 触发零 VL 写回冲刷；候选对应计时窗口冲刷为零。短测是定位证据，不代替 steady7、同批 scalar 对照或完整数值/PCS 门禁。
 
+生命周期隔离候选已通过完整 log 数值/特殊值/PCS 门禁及 N16 RTL 验收（180性能样本、90控制、421056项检查）。固定 `409f429572` gsim、VLEN128、RNE、冻结前16个输入，取steady7原始周期中位数、不扣控制组：
+
+| K | scalar_fast | auto m1 | auto m2 | auto m2加速比 | direct m2 |
+|---|---:|---:|---:|---:|---:|
+| 1 | 220 | 213 | 191 | 1.152× | 194 |
+| 4 | 663 | 675 | 551 | 1.203× | 566 |
+| 16 | 2432 | 2520 | 1995 | 1.219× | 2037 |
+
+因此真实 auto→Nx m2 在本次 N16 三个 K 下均超过同批标量，m1未一致超过。该结论不外推至其它长度、VLEN、舍入模式或特殊输入占比。此候选也包含掩码合并归约，不能把相对旧dispatch的全部降幅归因于单次flush。最终性能镜像及原始记录在 `single/libmvec/build/log-n16-lifetime` 和对应 `-gsim` 目录，默认构建尚未切换到实验选项。
+
 可从已构建的 N16 log 镜像拆出六种实现的独立短波形镜像：
 
 ```sh
