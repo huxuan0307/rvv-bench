@@ -12,7 +12,7 @@ python3 -B single/libmvec/tests/newmath/gate.py \
   --output /绝对路径/结果目录
 ```
 
-仅测exp可加 `--functions exp`。无array符号的旧库PCS门禁加 `--nx-only --abi-only --family old-original` 或 `--family old-nofrm`。ABI-only跳过新算法全域MPFR质量裁决，以该族incoming=VLMAX的输出/flags/errno为baseline，仅验证改变incoming vl不改变结果和PCS状态；这不是独立数学oracle，旧族普通域MPFR门禁由full harness另行负责。`--build-only` 只构建，结果不会标pass。脚本不构建/修改数学库、不修改harness、不调用gsim；执行时去掉 `--build-only`，并用 `--nemu /绝对路径/riscv64-nemu-interpreter` 显式选择执行器。每条目标编译和链接命令显式 `-march=rva23u64`。
+仅测exp可加 `--functions exp`。LTO archive使用 `--lto`，严格TU数值选项不变，仅启用LTO编译及链接；数学库应由gcc-ar建立plugin索引。log语义表取double分支，覆盖near-one两端及其相邻bit模式，Nx与array共享这份边界输入。无array符号的旧库PCS门禁加 `--nx-only --abi-only --family old-original` 或 `--family old-nofrm`。ABI-only跳过新算法全域MPFR质量裁决，以该族incoming=VLMAX的输出/flags/errno为baseline，仅验证改变incoming vl不改变结果和PCS状态；这不是独立数学oracle，旧族普通域MPFR门禁由full harness另行负责。`--build-only` 只构建，结果不会标pass。脚本不构建/修改数学库、不修改harness、不调用gsim；执行时去掉 `--build-only`，并用 `--nemu /绝对路径/riscv64-nemu-interpreter` 显式选择执行器。每条目标编译和链接命令显式 `-march=rva23u64`。
 
 ## 源与依赖
 

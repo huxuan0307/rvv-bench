@@ -33,7 +33,10 @@ def main():
     parser.add_argument('--case',action='append',choices=[*FUNCS,'abi-public'])
     parser.add_argument('--profile',choices=['full','format-smoke','n16','n16-trim'],default='full',
                         help='format-smoke: log only, n=16 K=1, same ten rounds; not full acceptance')
+    parser.add_argument('--math-archive',type=Path,help='explicit replacement math archive; retain installed scalar libm')
+    parser.add_argument('--lto',action='store_true',help='enable LTO in benchmark translation units and final link')
     a=parser.parse_args(); prefix=a.prefix.resolve()
+    if a.math_archive and not a.math_archive.is_file(): parser.error('math archive does not exist')
     if a.profile=='format-smoke' and a.case not in (None,['log']):
         parser.error('format-smoke only supports --case log')
     if a.profile=='n16-trim' and a.case and 'abi-public' in a.case:
@@ -55,9 +58,10 @@ def main():
         if p.returncode: raise RuntimeError(f'{label}: exit {p.returncode}: {p.stderr[-4000:]}')
         return p.stdout
     tools={n:prefix/'bin'/('riscv64-unknown-linux-gnu-'+n) for n in ('gcc','ar','nm','readelf','objdump','objcopy')}
-    cc=tools['gcc']; common=['-O3','-g','-march=rv64gcv','-mabi=lp64d','-mcmodel=medany',
-        '-fno-pie','-fno-stack-protector','-fno-lto','-mrvv-vector-bits=scalable', '-I'+str(HERE)]
-    target=['-march=rv64gcv','-mabi=lp64d']
+    cc=tools['gcc']; common=['-O3','-g','-march=rva23u64','-mabi=lp64d','-mcmodel=medany',
+        '-fno-pie','-fno-stack-protector','-flto' if a.lto else '-fno-lto','-mrvv-vector-bits=scalable', '-I'+str(HERE)]
+    if a.math_archive: common+=['-I'+str(HERE/'overlay')]
+    target=['-march=rva23u64','-mabi=lp64d']
     sysroot=Path(run([cc,'-print-sysroot'],'sysroot').strip()).resolve()
     if sysroot!=prefix/'sysroot': raise RuntimeError('compiler/sysroot mismatch')
     libs={n:Path(run([cc,*target,'-print-file-name='+n],'path-'+n).strip()).resolve() for n in ('libmvec.a','libm.a','libm-2.44.a','libc.a','libgcc.a')}
@@ -85,7 +89,12 @@ def main():
         headers={str(p.relative_to(sysroot)):identity(p) for p in [sysroot/'usr/include/math.h',sysroot/'usr/include/bits/math-vector.h']}),
         sources=source_ids,oracle=oracle,
         support_archives={str(p.relative_to(ROOT)):identity(p) for p in [ROOT/'thirdparty/am-riscv64-xs.a',ROOT/'thirdparty/klib-riscv64-xs.a']},cases=[])
+    if a.math_archive:
+        for name in ('entry_rne','tls_anchor'):
+            run([cc,*common,'-fno-fast-math','-c',HERE/(name+'.c'),'-o',out/(name+'.o')],name)
     manifest['profile']=a.profile
+    manifest['lto']=a.lto
+    if a.math_archive: manifest['math_archive']=identity(a.math_archive)
     selected=a.case or (['log'] if a.profile=='format-smoke' else list(FUNCS) if a.profile in ('n16','n16-trim') else [*FUNCS,'abi-public'])
     def save(): (out/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
     save()
@@ -109,6 +118,9 @@ def main():
                         flags+=['-fno-tree-vectorize','-fno-tree-slp-vectorize','-ffast-math' if mode=='scalar_fast' else '-fno-fast-math']
                         source=source_here/'kernel-loop.c'
                     elif mode.startswith('auto'):
+                        # Preserve each auto TU's LMUL and vectorization options;
+                        # GCC LTO merges incompatible per-TU target settings.
+                        if a.lto: flags+=['-fno-lto']
                         lmul=mode[-2:]; flags+=['-ffast-math','-fopenmp-simd','-DAUTO_VECTOR=1','-mrvv-max-lmul='+lmul,'-fopt-info-vec-all='+str(dest/(mode+'.vec.txt'))]
                         source=source_here/'kernel-loop.c'
                     else:
@@ -118,6 +130,8 @@ def main():
                         source=source_here/'kernel-direct.c'
                     run([cc,*flags,'-c',source,'-o',obj],name+'/'+mode)
                     dis=run([tools['objdump'],'-dr',obj],name+'/'+mode+'.disassembly')
+                    if a.lto:
+                        continue  # Inspect actual calls after the final LTO link.
                     if mode.startswith(('auto','direct')):
                         expected=f'_ZGV{mode[-1]}Nx'+('vv' if binary_arg else 'v')+'_'+f
                         if expected not in dis: raise RuntimeError(f'{mode} missing actual call {expected}')
@@ -144,11 +158,16 @@ def main():
                     phases=dict(first=1,warmup=2,steady=7),sample_count=len(modes)*len(lengths)*len(batches)*10,
                     calibration_count=len(controls)*len(lengths)*len(batches)*10,calibration_modes=controls,
                     order_policy='rotate-all-'+str(len(modes)+len(controls)),min_checks=1000)
-            link=[cc,*common,'-nostdlib','-static','-no-pie',*objs,out/'runtime.o','-Wl,--wrap=_trm_init','-Wl,--build-id=none',
-                '-T',source_root/'autovec/tls.ld','-T',source_root/'thirdparty/link.ld','-Wl,-Map='+str(dest/'link.map'),'-Wl,-t',
+            extra_link=([a.math_archive.resolve(),out/'entry_rne.o',out/'tls_anchor.o','-Wl,--wrap=main'] if a.math_archive else [])
+            link=[cc,*common,'-nostdlib','-static','-no-pie',*objs,*extra_link,out/'runtime.o','-Wl,--wrap=_trm_init','-Wl,--build-id=none',
+                '-T',HERE/'tls-safe.ld' if a.math_archive else source_root/'autovec/tls.ld','-T',source_root/'thirdparty/link.ld','-Wl,-Map='+str(dest/'link.map'),'-Wl,-t',
                 ROOT/'thirdparty/am-riscv64-xs.a','-Wl,--start-group',ROOT/'thirdparty/klib-riscv64-xs.a','-lm','-lc','-lgcc','-Wl,--end-group','-o',elf]
             trace=run(link,name+'/link')
-            for lib in ('libmvec.a','libm-2.44.a'):
+            if a.math_archive and str(a.math_archive.resolve()) not in trace:
+                raise RuntimeError('replacement math archive missing from link trace')
+            if a.math_archive and 'libmvec.a(' in (dest/'link.map').read_text():
+                raise RuntimeError('installed libmvec supplied symbols instead of explicit math archive')
+            for lib in (('libm-2.44.a',) if a.math_archive else ('libmvec.a','libm-2.44.a')):
                 if lib not in trace: raise RuntimeError('link trace lacks '+lib)
             resolved_libraries={}
             for line in trace.splitlines():
@@ -163,7 +182,14 @@ def main():
             headers=run([tools['readelf'],'-h','-l','-d','-A',elf],name+'/elf')
             if 'INTERP' in headers or '(NEEDED)' in headers or not re.search(r'Entry point address:\s+0x80000000\b',headers):
                 raise RuntimeError('invalid bare-metal ELF entry/loader')
-            run([tools['objdump'],'-d',elf],name+'/disassembly')
+            linked_disassembly=run([tools['objdump'],'-d',elf],name+'/disassembly')
+            if a.lto and f!='abi-public':
+                # Record the real final-code result, including clones/internalization.
+                entry['lto_vector_call_sites']={sym:len(re.findall(r'\b(?:jal|j)\s+[^\n]*<'+re.escape(sym)+r'(?:[.][^>]*)?>',linked_disassembly))
+                    for sym in (f'_ZGV1Nx'+('vv' if binary_arg else 'v')+'_'+f,
+                                f'_ZGV2Nx'+('vv' if binary_arg else 'v')+'_'+f)}
+                if not any(entry['lto_vector_call_sites'].values()):
+                    raise RuntimeError('LTO final image has no auditable vector call; inspect before accepting')
             run([tools['objcopy'],'-S','--set-section-flags','.bss=alloc,contents','-O','binary',elf,binary],name+'/objcopy')
             entry.update(status='built',sha256=sha(binary),elf_sha256=sha(elf),binary_size=binary.stat().st_size)
         except Exception as exc:

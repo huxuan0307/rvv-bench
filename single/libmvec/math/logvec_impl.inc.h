@@ -20,7 +20,11 @@
 #define FMA(a,b,c) FOP(vfmadd_vv)(a,b,c,vl)
 #define FMAF(a,b,c) FOP(vfmadd_vf)(a,b,c,vl)
 
+#ifdef LOGVEC_BASELINE
 static __attribute__((always_inline)) inline FV CORE(FV a, size_t vl)
+#else
+static __attribute__((noinline,noclone,riscv_vector_cc)) FV CAT2(CORE,_cold)(FV a, size_t vl)
+#endif
 {
         UV bits=REINTERPRET_FU(a);
         /* Unsigned interval classification also rejects every negative lane.
@@ -107,6 +111,46 @@ static __attribute__((always_inline)) inline FV CORE(FV a, size_t vl)
         }
     return result;
 }
+#ifndef LOGVEC_BASELINE
+/* Dispatch before floating-point operations so cold lanes retain exact flags. */
+static __attribute__((always_inline)) inline FV CORE(FV a, size_t vl)
+{
+        UV bits=REINTERPRET_FU(a);
+        /* Unsigned interval classification also rejects every negative lane.
+           No floating-point operation touches signaling NaNs before fallback. */
+        UV cls=UOP(vsub_vx)(bits,UINT64_C(0x0010000000000000),vl);
+        BV special=UCMPLT(cls,UINT64_C(0x7fe0000000000000),vl);
+        special=MOP(vmnot_m)(special,vl);
+        size_t nspecial=MOP(vcpop_m)(special,vl);
+        UV ix=bits;
+        UV delta=UOP(vsub_vx)(ix,UINT64_C(0x3fee000000000000),vl);
+        BV near=UCMPLT(delta,UINT64_C(0x0003090000000000),vl);
+        size_t nnear=MOP(vcpop_m)(near,vl);
+        if (__builtin_expect(nspecial || nnear,0))
+            return CAT2(CORE,_cold)(a,vl);
+        UV tmp=UOP(vsub_vx)(ix,UINT64_C(0x3fe6000000000000),vl);
+        UV index=UOP(vand_vx)(UOP(vsrl_vx)(tmp,45,vl),127,vl);
+        UV byte_index=UOP(vsll_vx)(index,4,vl);
+        FV invc=GATHER(&logvec_data.tab[0].invc,byte_index,vl);
+        FV logc=GATHER(&logvec_data.tab[0].logc,byte_index,vl);
+        UV iz=UOP(vsub_vv)(ix,UOP(vand_vx)(tmp,UINT64_C(0xfff0000000000000),vl),vl);
+        IV k=IOP(vsra_vx)(REINTERPRET_UI(tmp),52,vl);
+        FV kd=CONVERT(k,vl);
+        FV z=REINTERPRET_UF(iz);
+        FV r=FMA(z,invc,FOP(vfmv_v_f)(-1.0,vl));
+        FV w=FMAF(kd,logvec_data.ln2hi,logc);
+        FV hi=FA(w,r);
+        FV lo=FMAF(kd,logvec_data.ln2lo,FA(FS(w,hi),r));
+        FV r2=FM(r,r);
+        FV p=FMAF(r,logvec_data.poly[4],FOP(vfmv_v_f)(logvec_data.poly[3],vl));
+        FV q=FMAF(r,logvec_data.poly[2],FOP(vfmv_v_f)(logvec_data.poly[1],vl));
+        p=FMA(r2,p,q);
+        lo=FMAF(r2,logvec_data.poly[0],lo);
+        FV result=FA(FMA(FM(r,r2),p,lo),hi);
+
+    return result;
+}
+#endif
 #include "unary_entries.inc.h"
 #undef CAT2_
 #undef CAT2

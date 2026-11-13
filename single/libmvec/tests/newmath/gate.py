@@ -31,6 +31,7 @@ def main():
  ap.add_argument('--nemu',type=Path,help='运行时必须显式指定；build-only不需要')
  ap.add_argument('--functions',default='sin,cos,log,logf,exp,expf,pow')
  ap.add_argument('--build-only',action='store_true')
+ ap.add_argument('--lto',action='store_true',help='对严格测试TU和最终链接启用LTO，其他数学语义选项不变')
  ap.add_argument('--nx-only',action='store_true',help='仅Nx；用于无array符号的旧library')
  ap.add_argument('--abi-only',action='store_true',help='只测试Nx寄存器/入站vl/环境，不以新算法全域oracle裁决旧数学')
  ap.add_argument('--family',default='new',help='结果family标签，不改变oracle或容差')
@@ -75,7 +76,7 @@ def main():
   cmds.append(dict(label=label,command=cmd,returncode=p.returncode));dump(out/'commands.json',cmds)
   if p.returncode:raise RuntimeError(f'{label}: rc={p.returncode}, stderr={se}')
   return so.read_text(),se.read_text()
- common=['-O2','-g','-march=rva23u64','-mabi=lp64d','-mcmodel=medany','-fno-pie','-fno-stack-protector','-fno-lto','-mrvv-vector-bits=scalable','-fno-fast-math','-frounding-math','-ffp-contract=off','-fno-tree-vectorize','-fno-tree-slp-vectorize','-fno-builtin']
+ common=['-O2','-g','-march=rva23u64','-mabi=lp64d','-mcmodel=medany','-fno-pie','-fno-stack-protector','-flto' if a.lto else '-fno-lto','-mrvv-vector-bits=scalable','-fno-fast-math','-frounding-math','-ffp-contract=off','-fno-tree-vectorize','-fno-tree-slp-vectorize','-fno-builtin']
  def cc(label,src,dest,extra=()):run(label,[tools['gcc'],*common,*extra,'-c',src,'-o',dest])
  # 从仓库重新编译runtime及wrapper；外部预编译依赖单独登记。
  runtime=ROOT/'single/veclibm-runtime.c'
@@ -114,7 +115,7 @@ def main():
   if binary:sem=re.search(r'static const uint64_t sem\[\]\[2\]=\{(.*?)\n\};',text,re.S)[1];pairs=re.findall(r'\{([^{}]+)\}',sem)
   else:
    if single:text=text.split('#if SINGLE\nstatic const bits_t special[]=')[1].split('#else')[0];sem=text.split('{',1)[1].split('};',1)[0]
-   elif f=='exp':sem=text.split('#else\nstatic const bits_t special[]={',1)[1].split('};',1)[0]
+   elif f in ('exp','log'):sem=text.split('#else\nstatic const bits_t special[]={',1)[1].split('};',1)[0]
    else:sem=re.search(r'static const (?:uint64_t|bits_t) special\[\]=\{(.*?)\};',text,re.S)[1]
    pairs=[v.strip()+',0' for v in sem.replace('\n','').split(',') if v.strip()]
   header=['/* Frozen MPFR512 oracle; no tolerance relaxation. */',f'#include "{oracle}"',f'#define FUNC {f}',f'#define FN_TEXT "{f}"',f'#define SINGLE {int(single)}',f'#define BINARY {int(binary)}',f'#define KIND {kind}',f'#define COS_CASE {int(f=="cos")}',f'#define NX1 _ZGV1Nx{"vv" if binary else "v"}_{f}',f'#define NX2 _ZGV2Nx{"vv" if binary else "v"}_{f}']

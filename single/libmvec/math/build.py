@@ -14,8 +14,20 @@ BASE=['-O3','-g','-march=rva23u64','-mabi=lp64d','-mcmodel=medany',
 
 def sha(p): return hashlib.sha256(p.read_bytes()).hexdigest()
 def main():
-    ap=argparse.ArgumentParser();ap.add_argument('--exp-only',action='store_true');a=ap.parse_args()
-    out=HERE/'build';out.mkdir(exist_ok=True)
+    ap=argparse.ArgumentParser(description=__doc__)
+    ap.add_argument('--exp-only',action='store_true')
+    ap.add_argument('--log-only',action='store_true')
+    ap.add_argument('--baseline',action='store_true',help='retain original log inline cold paths')
+    ap.add_argument('--lto',action='store_true')
+    ap.add_argument('--output',type=Path)
+    ap.add_argument('--prefix',type=Path,default=PREFIX)
+    a=ap.parse_args()
+    if a.exp_only and a.log_only: ap.error('select at most one function subset')
+    prefix=a.prefix.resolve()
+    flags=[f for f in BASE if f!='-fno-lto']+['-flto' if a.lto else '-fno-lto']
+    if a.baseline: flags+=['-DLOGVEC_BASELINE=1']
+    out=a.output.resolve() if a.output else HERE/'build'
+    out.mkdir(parents=True,exist_ok=a.output is None)
     commands=[]
     def run(cmd,label):
         p=subprocess.run([str(x) for x in cmd],stdout=subprocess.PIPE,stderr=subprocess.PIPE)
@@ -25,28 +37,28 @@ def main():
         (out/'commands.json').write_text(json.dumps(commands,indent=2)+'\n')
         if p.returncode: raise RuntimeError(label+' failed; see '+str(out/(label+'.stderr')))
         return p.stdout.decode()
-    cc=PREFIX/'bin/riscv64-unknown-linux-gnu-gcc'
-    stem=['expvec','expvec_data'] if a.exp_only else ['expvec','expvec_data','expfvec','expfvec_data','logfvec','logfvec_data','powvec','sinvec','cosvec','trigvec_data','logvec','logvec_data']
+    cc=prefix/'bin/riscv64-unknown-linux-gnu-gcc'
+    stem=['expvec','expvec_data'] if a.exp_only else ['logvec','logvec_data'] if a.log_only else ['expvec','expvec_data','expfvec','expfvec_data','logfvec','logfvec_data','powvec','sinvec','cosvec','trigvec_data','logvec','logvec_data']
     objects=[]
     for name in stem:
         obj=out/(name+'.o');objects.append(obj)
         contract='off' if name in ('sinvec','cosvec') else 'fast'
-        run([cc,*BASE,'-ffp-contract='+contract,'-c',HERE/(name+'.c'),'-o',obj],name+'.compile')
-        run([PREFIX/'bin/riscv64-unknown-linux-gnu-objdump','-dr',obj],name+'.disassembly')
-        run([PREFIX/'bin/riscv64-unknown-linux-gnu-readelf','-A','-sW',obj],name+'.attributes')
+        run([cc,*flags,'-ffp-contract='+contract,'-c',HERE/(name+'.c'),'-o',obj],name+'.compile')
+        run([prefix/'bin/riscv64-unknown-linux-gnu-objdump','-dr',obj],name+'.disassembly')
+        run([prefix/'bin/riscv64-unknown-linux-gnu-readelf','-A','-sW',obj],name+'.attributes')
     # 通过临时名字创建新archive，防止ar保留旧成员。
     archive=out/('libnewmath-exp.a' if a.exp_only else 'libnewmath.a')
     import tempfile
     with tempfile.TemporaryDirectory(prefix='archive-',dir=out) as td:
         temporary=Path(td)/archive.name
-        run([PREFIX/'bin/riscv64-unknown-linux-gnu-ar','rcs',temporary,*objects],'archive')
+        run([prefix/('bin/riscv64-unknown-linux-gnu-gcc-ar' if a.lto else 'bin/riscv64-unknown-linux-gnu-ar'),'rcs',temporary,*objects],'archive')
         archive.write_bytes(temporary.read_bytes())
-    syms=run([PREFIX/'bin/riscv64-unknown-linux-gnu-nm','-g',archive],'archive.symbols')
-    functions=['exp'] if a.exp_only else ['log','exp','expf','logf','pow','sin','cos']
+    syms=run([prefix/('bin/riscv64-unknown-linux-gnu-gcc-nm' if a.lto else 'bin/riscv64-unknown-linux-gnu-nm'),'-g',archive],'archive.symbols')
+    functions=['exp'] if a.exp_only else ['log'] if a.log_only else ['log','exp','expf','logf','pow','sin','cos']
     expected=[f'_ZGV{lm}Nx'+('vv' if f=='pow' else 'v')+'_'+f for f in functions for lm in (1,2)]
     for sym in expected:
         if not any(line.endswith(' T '+sym) for line in syms.splitlines()): raise RuntimeError('missing symbol '+sym)
-    manifest=dict(archive=str(archive),sha256=sha(archive),compile_flags=BASE,
+    manifest=dict(archive=str(archive),sha256=sha(archive),compile_flags=flags,
                   functions=functions,nx_symbols=expected,
                   objects=[dict(path=str(p),sha256=sha(p)) for p in objects],
                   sources={str(p.relative_to(HERE)):sha(p) for p in HERE.glob('*') if p.is_file()})
