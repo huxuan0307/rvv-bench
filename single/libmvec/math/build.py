@@ -10,7 +10,8 @@ HERE=Path(__file__).resolve().parent
 PREFIX=Path('/nfs/share/huxuan/riscv-gnu-toolchain-gcc16.1.0-20261109-142438-6ba7795932e0-libmvec')
 BASE=['-O3','-g','-march=rva23u64','-mabi=lp64d','-mcmodel=medany',
       '-fno-pie','-fno-stack-protector','-fno-lto','-mrvv-vector-bits=scalable',
-      '-fno-fast-math','-fno-tree-vectorize','-fno-tree-slp-vectorize']
+      '-fno-fast-math','-fno-tree-vectorize','-fno-tree-slp-vectorize',
+      '--param=gpr2vr-cost=0','--param=fpr2vr-cost=0']
 
 def sha(p): return hashlib.sha256(p.read_bytes()).hexdigest()
 def main():

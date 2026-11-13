@@ -59,7 +59,8 @@ def main():
         return p.stdout
     tools={n:prefix/'bin'/('riscv64-unknown-linux-gnu-'+n) for n in ('gcc','ar','nm','readelf','objdump','objcopy')}
     cc=tools['gcc']; common=['-O3','-g','-march=rva23u64','-mabi=lp64d','-mcmodel=medany',
-        '-fno-pie','-fno-stack-protector','-flto' if a.lto else '-fno-lto','-mrvv-vector-bits=scalable', '-I'+str(HERE)]
+        '-fno-pie','-fno-stack-protector','-flto' if a.lto else '-fno-lto','-mrvv-vector-bits=scalable',
+        '--param=gpr2vr-cost=0','--param=fpr2vr-cost=0','-I'+str(HERE)]
     if a.math_archive: common+=['-I'+str(HERE/'overlay')]
     target=['-march=rva23u64','-mabi=lp64d']
     sysroot=Path(run([cc,'-print-sysroot'],'sysroot').strip()).resolve()
