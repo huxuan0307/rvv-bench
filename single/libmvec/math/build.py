@@ -20,6 +20,7 @@ def main():
     ap.add_argument('--log-only',action='store_true')
     ap.add_argument('--baseline',action='store_true',help='retain original log inline cold paths')
     ap.add_argument('--lto',action='store_true')
+    ap.add_argument('--log-hot-lifetime',action='store_true',help='isolate log hot operand lifetime after integer dispatch')
     ap.add_argument('--output',type=Path)
     ap.add_argument('--prefix',type=Path,default=PREFIX)
     a=ap.parse_args()
@@ -27,6 +28,7 @@ def main():
     prefix=a.prefix.resolve()
     flags=[f for f in BASE if f!='-fno-lto']+['-flto' if a.lto else '-fno-lto']
     if a.baseline: flags+=['-DLOGVEC_BASELINE=1']
+    if a.log_hot_lifetime: flags+=['-DLOGVEC_HOT_LIFETIME=1']
     out=a.output.resolve() if a.output else HERE/'build'
     out.mkdir(parents=True,exist_ok=a.output is None)
     commands=[]

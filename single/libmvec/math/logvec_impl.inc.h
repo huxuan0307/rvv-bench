@@ -121,13 +121,19 @@ static __attribute__((always_inline)) inline FV CORE(FV a, size_t vl)
         UV cls=UOP(vsub_vx)(bits,UINT64_C(0x0010000000000000),vl);
         BV special=UCMPLT(cls,UINT64_C(0x7fe0000000000000),vl);
         special=MOP(vmnot_m)(special,vl);
-        size_t nspecial=MOP(vcpop_m)(special,vl);
         UV ix=bits;
         UV delta=UOP(vsub_vx)(ix,UINT64_C(0x3fee000000000000),vl);
         BV near=UCMPLT(delta,UINT64_C(0x0003090000000000),vl);
-        size_t nnear=MOP(vcpop_m)(near,vl);
-        if (__builtin_expect(nspecial || nnear,0))
+        /* Only any-lane membership matters here, not the two population counts. */
+        BV cold=MOP(vmor_mm)(special,near,vl);
+        long first=MOP(vfirst_m)(cold,vl);
+        if (__builtin_expect(first>=0,0))
             return CAT2(CORE,_cold)(a,vl);
+#ifdef LOGVEC_HOT_LIFETIME
+        /* End dispatch temporaries before allocating destructive hot operands. */
+        __asm__ volatile("" : "+vr"(a));
+        ix=REINTERPRET_FU(a);
+#endif
         UV tmp=UOP(vsub_vx)(ix,UINT64_C(0x3fe6000000000000),vl);
         UV index=UOP(vand_vx)(UOP(vsrl_vx)(tmp,45,vl),127,vl);
         UV byte_index=UOP(vsll_vx)(index,4,vl);
