@@ -9,7 +9,9 @@
 - 完整配置：lengths=[16,128,1024]，batches=[1,4]，log/exp增加16。
 - 格式小用例：profile=format-smoke，仅log，lengths=[16]、batches=[1]；不计入全参数验收。
 - 每个配置固定10轮：第0轮first，第1–2轮warmup，第3–9轮steady。
-- 基础模式编号0–8依次为scalar_strict、scalar_fast、auto_m1、auto_m2、direct_m1、direct_m2、rdcycle、empty、copy。若构建所用数学库导出`_ZGV4Nx*`/`_ZGV8Nx*`，build.py为该函数追加direct_m4、direct_m8（编号5之后、控制之前），总数11；manifest的expected.modes与M行图例随之为11项，其余规则不变。build.py逐函数探测符号，因此同一构建中不同函数可分别使用9列或11列。
+- 基础模式编号0–8依次为scalar_strict、scalar_fast、auto_m1、auto_m2、direct_m1、direct_m2、rdcycle、empty、copy。若构建所用数学库导出`_ZGV4Nx*`/`_ZGV8Nx*`，build.py为该函数追加direct_m4、direct_m8（编号5之后、控制之前），总数11。若编译器还声明`__riscv_simd_math_abi_v1_lmul8`（16 位变体掩码），再追加auto_m4、auto_m8，总数13；此时overlay头按该宏把掩码从0x22（m1+m2）扩到0x2222（m1/m2/m4/m8 的 scalable notinbranch 位），旧编译器会拒绝更宽参数而不是忽略，故必须用`#ifdef`分支。manifest的expected.modes与M行图例随模式数变化，其余规则不变；build.py逐函数探测符号，因此同一构建中不同函数可分别使用9/11/13列。
+- `auto_m4`/`auto_m8`允许GCC生成更窄的余数循环（auto_m8→m4/m2/m1、auto_m4→m2/m1），manifest的observed_vector_calls记录实际调用符号，不视为错误。
+- 驱动与sysroot分离的安装（例如只装gcc、binutils与sysroot另置）：用`--binutils-prefix`指定binutils前缀、`--external-sysroot`显式接受外部sysroot；此时manifest额外记录`external_sysroot`（sysroot路径与每个链接库的sha256），默认仍然拒绝prefix之外的库。
 - 模式矩阵的`libmvec.a`只用必需36个`_ZGV{1,2}Nxv*`/`Nxvv*`符号判定；装库若还带mask/fixed-VL变体，只记录在manifest.library_extra_symbols，不参与验收。
 - 实际执行顺序：mode=(order+r)%(模式数+控制数)；CSV按mode排版，解析时order=(mode-r)%(模式数+控制数)精确还原。
 - csv2的required_markers为`E,perf-<function>,pass`；kv1保持原LIBMVEC_COMPLETE标记。解析器必须对照manifest，不自动猜测协议或接受降级。
@@ -32,7 +34,7 @@ E,perf-log,pass
 
 - 首行：版本、函数、实际VLEN位数、seed、profile。固定seed123456789；case由perf-函数名确定，并与E行、manifest交叉核验。
 - M行：固定模式图例；下一行：D记录的字段表头，D只是行类型前缀。
-- B行：n、K；按manifest的lengths外层/batches内层依次输出，每块恰好（模式数+控制数）个D行（6模式9行、8模式11行），mode必须按0..N-1顺序且不缺不重。
+- B行：n、K；按manifest的lengths外层/batches内层依次输出，每块恰好（模式数+控制数）个D行（6模式9行、8模式11行、10模式13行），mode必须按0..N-1顺序且不缺不重。
 - D行：mode、hash，以及10对起始计数b和耗时c。c为目标端uint64的end-begin，保留全部首次/预热/稳态数据；end由host按(b+c) modulo 2^64重建。保存b可核查时间轴与轮次，避免只留下不能追溯的汇总均值。
 - hash：同一n/K/mode十轮输出摘要。目标端打印前逐轮检查hash一致，不一致打印LIBMVEC_ERROR并非零退出，不打印成功E行。不同实现不强求hash相同，仍各自逐元素对照MPFR及允许误差。
 - T行：逐元素/边界检查数、失败数、逻辑样本总数。总数=块数×9×10，数学样本=块数×6×10、控制样本=块数×3×10。

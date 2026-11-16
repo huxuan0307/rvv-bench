@@ -30,8 +30,8 @@
 #ifndef HARNESS_MODES
 #define HARNESS_MODES 6
 #endif
-#if HARNESS_MODES != 6 && HARNESS_MODES != 8
-#error "HARNESS_MODES must be 6 or 8"
+#if HARNESS_MODES != 6 && HARNESS_MODES != 8 && HARNESS_MODES != 10
+#error "HARNESS_MODES must be 6, 8 or 10"
 #endif
 #define MODES HARNESS_MODES
 #define CONTROLS 3
@@ -76,6 +76,11 @@ static const char *names[MODES]={"scalar_fast","direct_m1","direct_m2"};
 #elif HARNESS_MODES == 8
 static const kernel_fn funcs[MODES]={scalar_strict,scalar_fast,auto_m1,auto_m2,direct_m1,direct_m2,direct_m4,direct_m8};
 static const char *names[MODES+CONTROLS]={"scalar_strict","scalar_fast","auto_m1","auto_m2","direct_m1","direct_m2","direct_m4","direct_m8","rdcycle","empty","copy"};
+#elif HARNESS_MODES == 10
+/* The compiler-generated LMUL4/LMUL8 columns follow the direct ones so the
+   eight-mode prefix stays byte-comparable with the earlier runs. */
+static const kernel_fn funcs[MODES]={scalar_strict,scalar_fast,auto_m1,auto_m2,direct_m1,direct_m2,direct_m4,direct_m8,auto_m4,auto_m8};
+static const char *names[MODES+CONTROLS]={"scalar_strict","scalar_fast","auto_m1","auto_m2","direct_m1","direct_m2","direct_m4","direct_m8","auto_m4","auto_m8","rdcycle","empty","copy"};
 #else
 static const kernel_fn funcs[MODES]={scalar_strict,scalar_fast,auto_m1,auto_m2,direct_m1,direct_m2};
 static const char *names[MODES+CONTROLS]={"scalar_strict","scalar_fast","auto_m1","auto_m2","direct_m1","direct_m2","rdcycle","empty","copy"};
@@ -86,6 +91,8 @@ static const char *names[MODES+CONTROLS]={"scalar_strict","scalar_fast","auto_m1
 static const unsigned mode_lmul[MODES]={1,1,2};
 #elif HARNESS_MODES == 8
 static const unsigned mode_lmul[MODES]={1,1,1,2,1,2,4,8};
+#elif HARNESS_MODES == 10
+static const unsigned mode_lmul[MODES]={1,1,1,2,1,2,4,8,4,8};
 #else
 static const unsigned mode_lmul[MODES]={1,1,1,2,1,2};
 #endif
@@ -177,6 +184,8 @@ __attribute__((noinline,noclone)) static int print_csv(uint64_t vlenb) {
     printf("M,fast,direct1,direct2\n");
 #elif HARNESS_MODES == 8
     printf("M,strict,fast,auto1,auto2,direct1,direct2,direct4,direct8,rdcycle,empty,copy\n");
+#elif HARNESS_MODES == 10
+    printf("M,strict,fast,auto1,auto2,direct1,direct2,direct4,direct8,auto4,auto8,rdcycle,empty,copy\n");
 #else
     printf("M,strict,fast,auto1,auto2,direct1,direct2,rdcycle,empty,copy\n");
 #endif

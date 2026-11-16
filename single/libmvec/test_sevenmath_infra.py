@@ -66,6 +66,32 @@ def csv3_text(function, repeat=4, header_repeat=None):
     return '\n'.join(lines)
 
 
+def case_auto(function, lengths, batches, repeat=1):
+    """Ten-mode manifest: direct LMUL4/8 plus compiler-generated auto LMUL4/8."""
+    base = case(function, lengths, batches, repeat)
+    base['expected']['modes'] = list(common.MODES_AUTO_LMUL48)
+    base['expected']['sample_count'] = 100 * len(lengths) * len(batches)
+    base['expected']['order_policy'] = 'rotate-all-13'
+    return base
+
+
+def csv3_text_auto(function, repeat=4):
+    """Minimal complete csv3 block with the 13-column auto extension."""
+    lines = [f'LIBMVEC_CSV,3,{function},128,123456789,grid,{repeat}',
+             'M,strict,fast,auto1,auto2,direct1,direct2,direct4,direct8,'
+             'auto4,auto8,rdcycle,empty,copy',
+             'm,hash,' + ','.join(f'b{r},c{r}' for r in range(10)),
+             'B,16,1']
+    for mode in range(13):
+        values = []
+        for r in range(10):
+            values += [100000 + mode * 1000 + r * 40, (300 + mode * 7) * repeat + r]
+        lines.append('D,' + str(mode) + ',123456789,' +
+                     ','.join(str(value) for value in values))
+    lines += ['T,1000,0,130', 'E,perf-' + function + ',pass', '']
+    return '\n'.join(lines)
+
+
 class InfraTests(unittest.TestCase):
     def test_grid_validation_and_seven_function_names(self):
         self.assertEqual(build.grid_values('16,128', max_value=1024), [16, 128])
@@ -114,6 +140,23 @@ class InfraTests(unittest.TestCase):
             broken['expected']['modes'] = bad
             with self.subTest(bad=bad), self.assertRaises(common.ManifestError):
                 common.expected_plan(broken, 'performance', 'perf-log')
+
+    def test_ten_mode_matrix_roundtrip(self):
+        manifest = case_auto('log', [16], [1], repeat=4)
+        expanded, metadata = compact_csv.expand(csv3_text_auto('log'), manifest)
+        self.assertEqual(metadata['timing_repeat'], 4)
+        for mode in ('auto_m4', 'auto_m8'):
+            self.assertIn(mode, expanded)
+        plan = common.expected_plan(manifest, 'performance', 'perf-log')
+        self.assertEqual(len(plan['modes']), 10)
+        self.assertEqual(len(list(common.rotation_schedule(plan))), 130)
+        # The eight-mode tuple must stay a valid (prefix) manifest.
+        self.assertEqual(common.expected_plan(case('log', [16], [1]), 'performance',
+                                              'perf-log')['modes'], list(common.MODES))
+        broken = case_auto('log', [16], [1], repeat=4)
+        broken['expected']['modes'] = list(common.MODES_LMUL48) + ['auto_m8', 'auto_m4']
+        with self.assertRaises(common.ManifestError):
+            common.expected_plan(broken, 'performance', 'perf-log')
 
     def test_direct_mapping_auto_is_always_nx(self):
         for function in build.FUNCS:

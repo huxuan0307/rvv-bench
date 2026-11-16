@@ -31,7 +31,12 @@ MODE_HEADER = 'M,strict,fast,auto1,auto2,direct1,direct2,rdcycle,empty,copy'
 MODES_LMUL48 = MODES + ('direct_m4', 'direct_m8')
 MODE_HEADER_LMUL48 = ('M,strict,fast,auto1,auto2,direct1,direct2,direct4,'
                       'direct8,rdcycle,empty,copy')
-MODE_TABLES = {MODES: MODE_HEADER, MODES_LMUL48: MODE_HEADER_LMUL48}
+# Full ten-column matrix (adds the compiler-generated LMUL4/8 columns).
+MODES_AUTO_LMUL48 = MODES_LMUL48 + ('auto_m4', 'auto_m8')
+MODE_HEADER_AUTO_LMUL48 = ('M,strict,fast,auto1,auto2,direct1,direct2,direct4,'
+                           'direct8,auto4,auto8,rdcycle,empty,copy')
+MODE_TABLES = {MODES: MODE_HEADER, MODES_LMUL48: MODE_HEADER_LMUL48,
+               MODES_AUTO_LMUL48: MODE_HEADER_AUTO_LMUL48}
 COLUMN_HEADER = 'm,hash,' + ','.join(f'b{r},c{r}' for r in range(ROUNDS))
 DECIMAL = re.compile(r'(?:0|[1-9][0-9]*)\Z')
 CSV_HEADER = re.compile(r'\bLIBMVEC_CSV\b')

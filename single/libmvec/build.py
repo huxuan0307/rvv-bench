@@ -22,6 +22,10 @@ NEW_ONLY=('sinf','cosf','powf')
 GCC_ABI_FUNCTIONS=('log','exp','sin','cos','pow','logf','expf')
 MODES=['scalar_strict','scalar_fast','auto_m1','auto_m2','direct_m1','direct_m2']
 MODES_LMUL48=['direct_m4','direct_m8']
+# Compiler-generated LMUL4/8 columns.  They are appended only when the build
+# compiler advertises the 16-bit ABI variant mask (__riscv_simd_math_abi_v1_lmul8)
+# AND the math archive exports the matching entry points.
+MODES_AUTO_LMUL48=['auto_m4','auto_m8']
 REQUIRED_PUBLIC=sum(([f'_ZGV{i}Nx{kind}_{f}' for i in (1,2)]
                      for kind,f in ((('vv' if f=='pow' else 'v'),f) for f in FUNCS)),[])
 
@@ -59,6 +63,12 @@ def main():
     parser.add_argument('--lengths',type=lambda s:grid_values(s,max_value=1024))
     parser.add_argument('--batches',type=lambda s:grid_values(s,max_value=1000000))
     parser.add_argument('--math-archive',type=Path,help='explicit replacement math archive; retain installed scalar libm')
+    parser.add_argument('--binutils-prefix',type=Path,
+        help='prefix supplying binutils (nm/ar/objdump/readelf/objcopy) when --prefix '
+             'is a driver-only compiler install; defaults to --prefix')
+    parser.add_argument('--external-sysroot',action='store_true',
+        help='accept a compiler whose sysroot is not under --prefix (driver-only install); '
+             'the external sysroot and every linked library are recorded with sha256')
     parser.add_argument('--lto',action='store_true',help='enable LTO in benchmark translation units and final link')
     parser.add_argument('--direct-interface',choices=['nx','array'],default='nx',
                         help='direct kernels call Nx vector ABI (default) or array ABI')
@@ -91,7 +101,10 @@ def main():
             stream.write('['+label+'] '+shlex.join(cmd)+'\nrc='+str(p.returncode)+'\n')
         if p.returncode: raise RuntimeError(f'{label}: exit {p.returncode}: {p.stderr[-4000:]}')
         return p.stdout
-    tools={n:prefix/'bin'/('riscv64-unknown-linux-gnu-'+n) for n in ('gcc','ar','nm','readelf','objdump','objcopy')}
+    binutils=prefix if not a.binutils_prefix else a.binutils_prefix
+    tools={n:prefix/'bin'/('riscv64-unknown-linux-gnu-'+n) for n in ('gcc',)}
+    tools.update({n:binutils/'bin'/('riscv64-unknown-linux-gnu-'+n)
+                  for n in ('ar','nm','readelf','objdump','objcopy')})
     cc=tools['gcc']; common=['-O3','-g','-march=rva23u64','-mabi=lp64d','-mcmodel=medany',
         '-fno-pie','-fno-stack-protector','-flto' if a.lto else '-fno-lto','-mrvv-vector-bits=scalable',
         '--param=gpr2vr-cost=0','--param=fpr2vr-cost=0','-I'+str(HERE)]
@@ -151,7 +164,10 @@ def main():
             kind='vv' if function=='pow' else 'v'
             have=all(f'_ZGV{lmul[-1]}Nx{kind}_{function}' in available
                      for lmul in ('m4','m8'))
-        return MODES+MODES_LMUL48 if have else list(MODES)
+        modes=MODES+(MODES_LMUL48 if have else [])
+        if have and compiler_lmul48:
+            modes=modes+MODES_AUTO_LMUL48
+        return list(modes)
     version=run([cc,'--version'],'compiler-version').splitlines()[0]
     oracle={'kind':'explicit shared frozen headers','functions':{f:identity(data_dir/(f+'.h')) for f in selected if f not in ('abi-public','float3-unit')}}
     paths=list(HERE.glob('*.c'))+list(HERE.glob('*.h'))+list(HERE.glob('*.py'))+[HERE/'tests/newmath/unit/float3_unit.c',HERE/'PROTOCOL.md',HERE/'tls-safe.ld',HERE/'overlay/bits/math-vector.h',ROOT/'autovec/av_runtime.c',ROOT/'autovec/av_runtime.h',ROOT/'single/veclibm-runtime.c',ROOT/'autovec/tls.ld',ROOT/'thirdparty/link.ld']
@@ -182,6 +198,11 @@ def main():
     manifest['timing_repeat']=a.timing_repeat
     manifest['lto_policy']='mixed: auto TUs non-LTO; other TUs and link use LTO' if a.lto else 'disabled'
     if a.math_archive: manifest['math_archive']=identity(a.math_archive)
+    if a.external_sysroot:
+        # Driver-only install: the sysroot is shared with the release build and
+        # must be captured explicitly, otherwise the measurement cannot be traced.
+        manifest['external_sysroot']={'path':str(sysroot),
+            'libraries':{n:identity(p) for n,p in libs.items()}}
     def save(): (out/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
     save()
     for f in selected:
@@ -258,9 +279,13 @@ def main():
                             raise RuntimeError(f'{mode} missing actual call {expected}')
                         seen=set(re.findall(r'_ZGV\w+|\b\w+vec_m[1248]\b',dis))
                         allowed={expected}
-                        # GCC may vectorize the m2 remainder with a real m1 clone.
-                        # Record it rather than mislabeling a valid epilogue as m2-only.
-                        if mode=='auto_m2': allowed.add('_ZGV1Nx'+('vv' if binary_arg else 'v')+'_'+f)
+                        # The vectorizer may keep a remainder loop in a narrower
+                        # LMUL (auto_m8 -> m4/m2/m1, auto_m4 -> m2/m1, auto_m2 ->
+                        # m1).  Record those rather than failing a valid epilogue.
+                        kind='vv' if binary_arg else 'v'
+                        order={'auto_m1':(), 'auto_m2':('m1',), 'auto_m4':('m2','m1'),
+                               'auto_m8':('m4','m2','m1')}.get(mode,())
+                        allowed.update(f'_ZGV{lmul[-1]}Nx{kind}_{f}' for lmul in order)
                         if seen-allowed: raise RuntimeError(f'{mode} unexpected vector symbols {seen-allowed}')
                         entry.setdefault('observed_vector_calls',{})[mode]=sorted(seen)
                     elif '_ZGV' in dis or not re.search(r'R_RISCV_CALL(?:_PLT)?\s+'+re.escape(f)+r'\b',dis):

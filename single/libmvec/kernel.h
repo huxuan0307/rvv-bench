@@ -28,6 +28,8 @@ DECLARE_KERNEL(direct_m1);
 DECLARE_KERNEL(direct_m2);
 DECLARE_KERNEL(direct_m4);
 DECLARE_KERNEL(direct_m8);
+DECLARE_KERNEL(auto_m4);
+DECLARE_KERNEL(auto_m8);
 DECLARE_KERNEL(empty_kernel);
 DECLARE_KERNEL(copy_kernel);
 #endif

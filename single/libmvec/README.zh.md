@@ -148,7 +148,7 @@ analyze只接受完整passed RTL报告，并核对manifest、BIN、工具、VLEN
 ## 覆盖、计时和参考
 
 - 七家族：double log/exp/sin/cos/pow，float logf/expf；36公开ABI独立检查，私有_len不在范围。
-- 六实现：scalar_strict、scalar_fast、auto_m1、auto_m2、direct_m1、direct_m2；控制为rdcycle、empty、copy。若构建用数学库导出`_ZGV4Nx*`/`_ZGV8Nx*`，同一矩阵追加direct_m4、direct_m8（逐函数探测符号），CSV每块11个D行。
+- 六实现：scalar_strict、scalar_fast、auto_m1、auto_m2、direct_m1、direct_m2；控制为rdcycle、empty、copy。若构建用数学库导出`_ZGV4Nx*`/`_ZGV8Nx*`，同一矩阵追加direct_m4、direct_m8（逐函数探测符号），CSV每块11个D行；若编译器声明16位变体掩码（`__riscv_simd_math_abi_v1_lmul8`），再追加编译器自动生成的auto_m4、auto_m8，最多13列。
 - 全配置n=16/128/1024、K=1/4，log/exp增加16。每组first1＋warmup2＋steady7，模式顺序轮换；保留原始值，不删离群、不扣控制开销。
 - 窗口含K次数组调用、访存、循环和调用成本；初始化、oracle、hash、打印在外。first前已做正确性测试，不是冷缓存。rdcycle的编译器memory barrier不是完整硬件串行化。
 - 直接Nx ABI始终处理VLMAX，尾部走真实scalar。m2自动路径可能有合法m1尾循环，manifest记录实际调用。

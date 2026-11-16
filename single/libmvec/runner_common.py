@@ -29,6 +29,9 @@ MODES = ('scalar_strict', 'scalar_fast', 'auto_m1', 'auto_m2',
 # when the built archive exports those kernels; both prefixes remain valid
 # manifests so previously measured six-mode runs stay auditable.
 MODES_LMUL48 = MODES + ('direct_m4', 'direct_m8')
+# Full ten-column matrix: the compiler-generated LMUL4/8 columns follow the
+# direct ones, so MODES_LMUL48 stays an exact prefix of this tuple.
+MODES_AUTO_LMUL48 = MODES_LMUL48 + ('auto_m4', 'auto_m8')
 N16_TRIM_MODES = ('scalar_fast', 'direct_m1', 'direct_m2')
 CALIBRATION_MODES = ('rdcycle', 'empty', 'copy')
 ORDER_POLICY = 'rotate-all-9'
@@ -494,12 +497,14 @@ def expected_plan(entry, suite, name):
         modes = expected.get('modes')
         if profile == 'n16-trim':
             wanted_modes = N16_TRIM_MODES
-        elif isinstance(modes, list) and tuple(modes) in (MODES, MODES_LMUL48):
+        elif isinstance(modes, list) and tuple(modes) in (MODES, MODES_LMUL48,
+                                                          MODES_AUTO_LMUL48):
             wanted_modes = tuple(modes)
         else:
             raise ManifestError(
-                f'{name}: expected.modes must be {list(MODES)!r} or '
-                f'{list(MODES_LMUL48)!r}')
+                f'{name}: expected.modes must be one of '
+                f'{list(MODES)!r}, {list(MODES_LMUL48)!r} or '
+                f'{list(MODES_AUTO_LMUL48)!r}')
         wanted_controls = () if profile == 'n16-trim' else CALIBRATION_MODES
         wanted_policy = 'rotate-all-' + str(len(wanted_modes) + len(wanted_controls))
         if not isinstance(modes, list) or modes != list(wanted_modes):

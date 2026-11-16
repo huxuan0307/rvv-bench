@@ -11,7 +11,7 @@
 | 审核已有正确性门禁产物 | [tests/newmath/audit_receipts.py](tests/newmath/audit_receipts.py) | 可重复 --gate-dir，--output | 产物身份与通过标志审计；不运行目标程序 |
 | 合并原始测量生成周期汇总 | [analysis_newmath/cycles_summary.py](analysis_newmath/cycles_summary.py) | --input 四组来源的合并原始 CSV | --output 新 CSV；192行、10列、steady7 中位数；不输出加速比，不覆盖已有文件 |
 | 对旧七函数批次做严格证据分析 | [analysis_newmath/analyze.py](analysis_newmath/analyze.py) | manifest位置参数，--input-root | --output 新目录；限定原 campaign/schema，不是任意批次通用分析器 |
-| 构建已安装 libmvec 的基准 | [build.py](build.py) | --prefix、--case、--profile、--output | 冻结测试源码、oracle、ELF/BIN及manifest；不是三库统一构建脚本的直接替代 |
+| 构建已安装 libmvec 的基准 | [build.py](build.py) | --prefix、--case、--profile、--output；可选--math-archive/--external-sysroot/--binutils-prefix | 冻结测试源码、oracle、ELF/BIN及manifest；不是三库统一构建脚本的直接替代 |
 | NEMU功能运行/gsim周期测量 | [run.py](run.py) | nemu/gsim 子命令，--manifest、--output | 隔离运行目录与 stdout/stderr；gsim命令会启动仿真 |
 | 验收运行结果并导出样本 | [collect.py](collect.py) | --run、--require-complete | 完整性及退出状态验收，展开逐轮样本；不运行仿真 |
 | 运行历史完整批次调度 | [node_campaign.py](node_campaign.py) | --manifest、--nemu-run、--output、--emu、--reference | 会启动ABI、七函数及复跑阶段；不用于直接启动当前log优化迭代 |
