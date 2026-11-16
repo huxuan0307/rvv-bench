@@ -1,11 +1,13 @@
 /* libmvec public-ABI correctness program (bare metal, AM/TLS).
  *
- * Exercises every one of the 36 shared libmvec entry points exported by the
- * installed GLIBC_2.45 RISC-V libmvec:
+ * Exercises every shared libmvec entry point the suite declares: the 36
+ * released GLIBC_2.45 entries plus the float candidates an explicit math
+ * archive adds (sinf/cosf, and later powf):
  *
  *   log/exp      m1/m2 x fixed/Nx x unmasked/masked   (8 + 8)
  *   sin/cos/pow  m1/m2 x fixed/Nx unmasked            (4 + 4 + 4)
  *   logf/expf    m1/m2 x fixed/Nx unmasked            (4 + 4)
+ *   sinf/cosf    m1/m2 x fixed/Nx unmasked            (4 + 4)   [candidates]
  *
  * Each entry is called directly through its native RVV intrinsic type with
  * the vector calling convention.  The checks cover:
@@ -86,12 +88,26 @@ extern vfloat32m1_t _ZGV1Nxv_expf (vfloat32m1_t) RVV_CC;
 extern vfloat32m2_t _ZGV2N8v_expf (vfloat32m2_t) RVV_CC;
 extern vfloat32m2_t _ZGV2Nxv_expf (vfloat32m2_t) RVV_CC;
 
+extern vfloat32m1_t _ZGV1N4v_sinf (vfloat32m1_t) RVV_CC;
+extern vfloat32m1_t _ZGV1Nxv_sinf (vfloat32m1_t) RVV_CC;
+extern vfloat32m2_t _ZGV2N8v_sinf (vfloat32m2_t) RVV_CC;
+extern vfloat32m2_t _ZGV2Nxv_sinf (vfloat32m2_t) RVV_CC;
+
+extern vfloat32m1_t _ZGV1N4v_cosf (vfloat32m1_t) RVV_CC;
+extern vfloat32m1_t _ZGV1Nxv_cosf (vfloat32m1_t) RVV_CC;
+extern vfloat32m2_t _ZGV2N8v_cosf (vfloat32m2_t) RVV_CC;
+extern vfloat32m2_t _ZGV2Nxv_cosf (vfloat32m2_t) RVV_CC;
+
 /* ------------------------------------------------------------------ */
 /* CSR helpers and bit utilities.                                     */
 
 #define ABI_MAX_LANES 512u
 
 static uint64_t abi_checks, abi_failed, sym_checks, sym_failed;
+/* Current test stage, case row and lane, printed with every failure so a
+ * rejected value can be traced back to the test that produced it. */
+static const char *abi_stage = "?";
+static unsigned abi_case_row, abi_lane_row;
 static size_t abi_vlen_bits;
 static int abi_perturb_vl;
 
@@ -199,7 +215,9 @@ fail (const char *sym, const char *what, uint64_t got, uint64_t want)
 {
   ++sym_failed;
   ++abi_failed;
-  printf_ ("FAIL symbol=%s what=%s got=0x%016llx want=0x%016llx\n", sym, what,
+  printf_ ("FAIL symbol=%s what=%s stage=%s case=%u lane=%u "
+           "got=0x%016llx want=0x%016llx\n", sym, what, abi_stage,
+           abi_case_row, abi_lane_row,
            (unsigned long long) got, (unsigned long long) want);
 }
 
@@ -335,6 +353,16 @@ DEF_U32 (m1, _ZGV1Nxv_expf)
 DEF_U32 (m2, _ZGV2N8v_expf)
 DEF_U32 (m2, _ZGV2Nxv_expf)
 
+DEF_U32 (m1, _ZGV1N4v_sinf)
+DEF_U32 (m1, _ZGV1Nxv_sinf)
+DEF_U32 (m2, _ZGV2N8v_sinf)
+DEF_U32 (m2, _ZGV2Nxv_sinf)
+
+DEF_U32 (m1, _ZGV1N4v_cosf)
+DEF_U32 (m1, _ZGV1Nxv_cosf)
+DEF_U32 (m2, _ZGV2N8v_cosf)
+DEF_U32 (m2, _ZGV2Nxv_cosf)
+
 /* ------------------------------------------------------------------ */
 /* Symbol descriptors and shared test engine.                         */
 
@@ -365,6 +393,8 @@ struct symdesc
 #define ABI_CASES_pow ABI_CASES_POW
 #define ABI_CASES_logf ABI_CASES_LOGF
 #define ABI_CASES_expf ABI_CASES_EXPF
+#define ABI_CASES_sinf ABI_CASES_SINF
+#define ABI_CASES_cosf ABI_CASES_COSF
 
 #define ABI_ULP_log ABI_ULP_LOG
 #define ABI_ULP_exp ABI_ULP_EXP
@@ -373,6 +403,8 @@ struct symdesc
 #define ABI_ULP_pow ABI_ULP_POW
 #define ABI_ULP_logf ABI_ULP_LOGF
 #define ABI_ULP_expf ABI_ULP_EXPF
+#define ABI_ULP_sinf ABI_ULP_SINF
+#define ABI_ULP_cosf ABI_ULP_COSF
 
 #define SYM_U64(NAME, LM, FIXED, LANES, SYMBOL, FAM) \
   { .name = NAME, .fam = #FAM, .single = 0, .masked = 0, .fixed = FIXED, \
@@ -438,6 +470,16 @@ static const struct symdesc syms[] = {
   SYM_U32 ("_ZGV1Nxv_expf", 1, 0, 0, _ZGV1Nxv_expf, expf),
   SYM_U32 ("_ZGV2N8v_expf", 2, 1, 8, _ZGV2N8v_expf, expf),
   SYM_U32 ("_ZGV2Nxv_expf", 2, 0, 0, _ZGV2Nxv_expf, expf),
+
+  SYM_U32 ("_ZGV1N4v_sinf", 1, 1, 4, _ZGV1N4v_sinf, sinf),
+  SYM_U32 ("_ZGV1Nxv_sinf", 1, 0, 0, _ZGV1Nxv_sinf, sinf),
+  SYM_U32 ("_ZGV2N8v_sinf", 2, 1, 8, _ZGV2N8v_sinf, sinf),
+  SYM_U32 ("_ZGV2Nxv_sinf", 2, 0, 0, _ZGV2Nxv_sinf, sinf),
+
+  SYM_U32 ("_ZGV1N4v_cosf", 1, 1, 4, _ZGV1N4v_cosf, cosf),
+  SYM_U32 ("_ZGV1Nxv_cosf", 1, 0, 0, _ZGV1Nxv_cosf, cosf),
+  SYM_U32 ("_ZGV2N8v_cosf", 2, 1, 8, _ZGV2N8v_cosf, cosf),
+  SYM_U32 ("_ZGV2Nxv_cosf", 2, 0, 0, _ZGV2Nxv_cosf, cosf),
 };
 
 #define NSYMS (sizeof syms / sizeof syms[0])
@@ -537,12 +579,17 @@ scalar_tail (const struct symdesc *s, uint64_t xb, uint64_t yb)
 {
   if (s->single)
     {
-      float x = b2f ((uint32_t) xb);
-      (void) yb; /* no binary float entry in this ABI */
+      float x = b2f ((uint32_t) xb), y = b2f ((uint32_t) yb);
       if (strcmp (s->fam, "logf") == 0)
         return (uint64_t) f2b (logf (x));
       if (strcmp (s->fam, "expf") == 0)
         return (uint64_t) f2b (expf (x));
+      if (strcmp (s->fam, "sinf") == 0)
+        return (uint64_t) f2b (sinf (x));
+      if (strcmp (s->fam, "cosf") == 0)
+        return (uint64_t) f2b (cosf (x));
+      if (strcmp (s->fam, "powf") == 0)
+        return (uint64_t) f2b (powf (x, y));
     }
   else
     {
@@ -656,11 +703,13 @@ verify_flags (const struct symdesc *s, unsigned got, const struct rcase *c)
 static void
 run_data_cases (const struct symdesc *s, size_t N)
 {
+  abi_stage = "data";
   uint8_t mb[(ABI_MAX_LANES + 7) / 8 + 1];
   mask_fill (mb, N, 1, 0);
 
   for (unsigned i = 0; i < s->ncases; ++i)
     {
+      abi_case_row = i;
       struct rcase c = get_case (s, i);
       for (size_t l = 0; l < N; ++l)
         load_case (s, &c, l);
@@ -682,6 +731,7 @@ run_data_cases (const struct symdesc *s, size_t N)
 static void
 run_chunk_sweep (const struct symdesc *s, size_t N)
 {
+  abi_stage = "sweep";
   uint8_t mb[(ABI_MAX_LANES + 7) / 8 + 1];
   mask_fill (mb, N, 1, 0);
   const unsigned fin = ABI_DATA_FINITE_PER_FUNC;
@@ -712,6 +762,7 @@ run_chunk_sweep (const struct symdesc *s, size_t N)
 static void
 run_fenv (const struct symdesc *s, size_t N)
 {
+  abi_stage = "fenv";
   static const unsigned priors[4] = {
     0, ABI_FE_NX, ABI_FE_UF | ABI_FE_OF, ABI_FE_ALL
   };
@@ -759,6 +810,7 @@ run_fenv (const struct symdesc *s, size_t N)
 static void
 run_adapt (const struct symdesc *s, size_t N)
 {
+  abi_stage = "adapt";
   size_t ns[6];
   unsigned nn = 0;
   size_t cand[6] = { 0, 1, N > 2 ? N - 1 : 0, N, N + 1, 2 * N + 3 };
@@ -879,6 +931,7 @@ run_adapt (const struct symdesc *s, size_t N)
 static void
 run_vl_independence (const struct symdesc *s, size_t N)
 {
+  abi_stage = "vl";
   uint8_t mb[(ABI_MAX_LANES + 7) / 8 + 1];
   uint64_t base[ABI_MAX_LANES];
   struct rcase c = get_case (s, 0);
@@ -913,6 +966,7 @@ run_vl_independence (const struct symdesc *s, size_t N)
 static void
 run_masked_semantics (const struct symdesc *s, size_t N)
 {
+  abi_stage = "masked";
   uint8_t mb[(ABI_MAX_LANES + 7) / 8 + 1];
   const int islog = strcmp (s->fam, "log") == 0;
   const uint64_t snan = s->single ? UINT64_C (0x7f800001)

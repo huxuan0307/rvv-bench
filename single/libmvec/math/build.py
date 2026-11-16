@@ -52,6 +52,8 @@ FUNCTION_UNITS = {
     'pow': ('powvec',),
     'sin': ('sinvec', 'trigvec_data'),
     'cos': ('cosvec', 'trigvec_data'),
+    'sinf': ('sinfvec', 'sincosfvec_data'),
+    'cosf': ('cosfvec', 'sincosfvec_data'),
 }
 INCLUDE = re.compile(r'^\s*#\s*include\s*"([^"\n]+)"', re.MULTILINE)
 DATE_DIR = re.compile(r'\d{8}[-_]\d{6}')
@@ -71,7 +73,7 @@ def select_functions(text):
     functions = text.split(',')
     if (not functions or any(f not in FUNCTION_UNITS for f in functions)
             or len(functions) != len(set(functions))):
-        raise ValueError('functions 须为不重复的七函数名，用逗号分隔')
+        raise ValueError('functions 须为不重复的已知函数名，用逗号分隔')
     return functions
 
 
@@ -258,7 +260,7 @@ def check_unit_predefs(cache, flags, unit, variant, load):
 def expected_symbols(functions):
     symbols = []
     for f in functions:
-        sig = 'vv' if f == 'pow' else 'v'
+        sig = 'vv' if f in ('pow', 'powf') else 'v'
         symbols.extend((f'{f}vec_m1', f'{f}vec_m2',
                         f'_ZGV1Nx{sig}_{f}', f'_ZGV2Nx{sig}_{f}'))
     return symbols

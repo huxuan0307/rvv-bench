@@ -22,7 +22,8 @@ U64_MAX = (1 << 64) - 1
 MODES = ('scalar_strict', 'scalar_fast', 'auto_m1', 'auto_m2',
          'direct_m1', 'direct_m2')
 CALIBRATION_MODES = ('rdcycle', 'empty', 'copy')
-FUNCTIONS = ('log', 'exp', 'sin', 'cos', 'pow', 'logf', 'expf')
+FUNCTIONS = ('log', 'exp', 'sin', 'cos', 'pow', 'logf', 'expf',
+             'sinf', 'cosf')
 PHASES = {'first': 1, 'warmup': 2, 'steady': 7}
 ROUNDS = 10
 MODE_HEADER = 'M,strict,fast,auto1,auto2,direct1,direct2,rdcycle,empty,copy'

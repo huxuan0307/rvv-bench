@@ -19,4 +19,19 @@ struct logfvec_data {
  struct {double invc,logc;} tab[16];double ln2,poly[3];
 };
 extern const struct logfvec_data logfvec_data;
+/* glibc flt-32 sincos_t twice (positively and negatively signed cosine
+   polynomial) plus the float threshold-free polynomial selector constants.
+   See s_sincosf_data.c: table[1] is table[0] with the cosine polynomial
+   negated, which the RVV kernel applies as a sign flip on the result. */
+struct sincosfvec_data {
+ struct {
+  double sign[4], hpi_inv, hpi, c0, c1, c2, c3, c4, s1, s2, s3;
+ } table[2];
+};
+extern const struct sincosfvec_data sincosfvec_data;
+/* glibc flt-32 __powf_log2_data (POWF_SCALE == 1 on this target). */
+struct powfvec_data {
+ struct {double invc,logc;} tab[16];double poly[5];
+};
+extern const struct powfvec_data powfvec_data;
 #endif

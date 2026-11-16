@@ -22,6 +22,8 @@ NEWLIB_ARRAY(cos,double);
 NEWLIB_ARRAY(pow,double);
 NEWLIB_ARRAY(expf,float);
 NEWLIB_ARRAY(logf,float);
+NEWLIB_ARRAY(sinf,float);
+NEWLIB_ARRAY(cosf,float);
 #undef NEWLIB_ARRAY
 #define NEWLIB_NX_UNARY(name,type1,type2) \
 __attribute__((riscv_vector_cc)) type1 _ZGV1Nxv_##name(type1); \
@@ -32,6 +34,8 @@ NEWLIB_NX_UNARY(sin,vfloat64m1_t,vfloat64m2_t);
 NEWLIB_NX_UNARY(cos,vfloat64m1_t,vfloat64m2_t);
 NEWLIB_NX_UNARY(logf,vfloat32m1_t,vfloat32m2_t);
 NEWLIB_NX_UNARY(expf,vfloat32m1_t,vfloat32m2_t);
+NEWLIB_NX_UNARY(sinf,vfloat32m1_t,vfloat32m2_t);
+NEWLIB_NX_UNARY(cosf,vfloat32m1_t,vfloat32m2_t);
 #undef NEWLIB_NX_UNARY
 __attribute__((riscv_vector_cc)) vfloat64m1_t _ZGV1Nxvv_pow(vfloat64m1_t,vfloat64m1_t);
 __attribute__((riscv_vector_cc)) vfloat64m2_t _ZGV2Nxvv_pow(vfloat64m2_t,vfloat64m2_t);

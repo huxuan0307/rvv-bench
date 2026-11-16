@@ -12,7 +12,14 @@ import shlex
 
 HERE=Path(__file__).resolve().parent
 ROOT=HERE.parents[1]
-FUNCS=('log','exp','sin','cos','pow','logf','expf')
+FUNCS=('log','exp','sin','cos','pow','logf','expf','sinf','cosf')
+# Functions that only exist in an explicit replacement math archive (the
+# installed libmvec has no float sin/cos/pow); they extend the ABI suite.
+NEW_ONLY=('sinf','cosf')
+# Functions with an entry in the installed compiler's riscv_simd_math_table,
+# i.e. the ones auto-vectorized code can call.  The new float entries have no
+# compiler ABI yet, so their auto_* modes measure the scalar code GCC emits.
+GCC_ABI_FUNCTIONS=('log','exp','sin','cos','pow','logf','expf')
 MODES=['scalar_strict','scalar_fast','auto_m1','auto_m2','direct_m1','direct_m2']
 
 def sha(p):
@@ -27,7 +34,7 @@ def identity(p):
 
 def direct_symbol(function, mode, interface):
     if interface=='array': return function+'vec_'+mode[-2:]
-    return f'_ZGV{mode[-1]}Nx'+('vv' if function=='pow' else 'v')+'_'+function
+    return f'_ZGV{mode[-1]}Nx'+('vv' if function in ('pow','powf') else 'v')+'_'+function
 
 def grid_values(text, *, max_value):
     try:
@@ -43,7 +50,7 @@ def main():
     parser.add_argument('--prefix',type=Path,required=True)
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--data-dir',type=Path,required=True,help='explicit shared frozen perf input headers')
-    parser.add_argument('--case',action='append',choices=list(FUNCS),required=True)
+    parser.add_argument('--case',action='append',choices=[*FUNCS,'abi-public'],required=True)
     parser.add_argument('--profile',choices=['full','format-smoke','n16','grid'],default='n16',
                         help='grid uses explicit lengths/batches and retains all nine modes and ten rounds')
     parser.add_argument('--lengths',type=lambda s:grid_values(s,max_value=1024))
@@ -65,7 +72,8 @@ def main():
     if a.profile!='grid' and (a.lengths or a.batches): parser.error('--lengths and --batches require --profile grid')
     if not 1<=a.timing_repeat<=64: parser.error('--timing-repeat must be in [1,64]')
     for f in a.case:
-        if not (data_dir/(f+'.h')).is_file(): parser.error('missing frozen input header for '+f)
+        if f!='abi-public' and not (data_dir/(f+'.h')).is_file():
+            parser.error('missing frozen input header for '+f)
     modes=MODES
     controls=['rdcycle','empty','copy']
     out=a.output.resolve(); out.mkdir(parents=True,exist_ok=False)
@@ -93,7 +101,11 @@ def main():
         if not p.is_file() or not p.is_relative_to(prefix): raise RuntimeError(f'library outside installed prefix: {n}={p}')
     allsyms=run([tools['nm'],'-g','--defined-only',libs['libmvec.a']],'libmvec-symbols')
     public_symbols=sorted(set(re.findall(r'\b(_ZGV\w+)\s*$',allsyms,re.M))-{x for x in re.findall(r'\b(_ZGV\w+)\s*$',allsyms,re.M) if x.endswith('_len')})
-    if len(public_symbols)!=36: raise RuntimeError(f'expected 36 public symbols, got {len(public_symbols)}')
+    if len(public_symbols)<36: raise RuntimeError(f'expected at least the 36 released symbols, got {len(public_symbols)}')
+    # The ABI suite audits exactly the entries it declares (36 released plus any
+    # candidates an explicit math archive adds); derive that list from abi.c so
+    # the audit can never silently skip a declared entry.
+    abi_declared=sorted(set(re.findall(r'\b(_ZGV\w+)\s*\(',(HERE/'abi.c').read_text())))
     selected=a.case
     if a.direct_interface=='array':
         archive=a.math_archive.resolve() if a.math_archive else libs['libmvec.a']
@@ -105,7 +117,7 @@ def main():
         missing=sorted(required-available)
         if missing: raise RuntimeError(f'array interface symbols missing from {archive}: {", ".join(missing)}')
     version=run([cc,'--version'],'compiler-version').splitlines()[0]
-    oracle={'kind':'explicit shared frozen headers','functions':{f:identity(data_dir/(f+'.h')) for f in selected}}
+    oracle={'kind':'explicit shared frozen headers','functions':{f:identity(data_dir/(f+'.h')) for f in selected if f!='abi-public'}}
     paths=list(HERE.glob('*.c'))+list(HERE.glob('*.h'))+list(HERE.glob('*.py'))+[HERE/'PROTOCOL.md',HERE/'tls-safe.ld',HERE/'overlay/bits/math-vector.h',ROOT/'autovec/av_runtime.c',ROOT/'autovec/av_runtime.h',ROOT/'single/veclibm-runtime.c',ROOT/'autovec/tls.ld',ROOT/'thirdparty/link.ld']
     snap=out/'source'; snap.mkdir()
     source_ids={}
@@ -144,10 +156,20 @@ def main():
         try:
             objs=[]; defs=[]
             if f=='abi-public':
+                # Every entry abi.c declares must be provided by the installed
+                # libmvec or by the explicit math archive; the collector then
+                # requires one LIBMVEC_ABI record per declared symbol.
+                provided=set(public_symbols)
+                if a.math_archive:
+                    asyms=run([tools['nm'],'-g','--defined-only',a.math_archive],'abi-archive-symbols')
+                    provided|={x for x in re.findall(r'\b(_ZGV\w+)\s*$',asyms,re.M)
+                               if not x.endswith('_len')}
+                missing=sorted(set(abi_declared)-provided)
+                if missing: raise RuntimeError('abi-public symbols not provided: '+', '.join(missing))
                 obj=dest/'abi.o'; run([cc,*common,'-fno-fast-math','-fno-tree-vectorize','-c',source_here/'abi.c','-o',obj],name+'/compile'); objs.append(obj)
-                entry['expected']=dict(min_checks=36,abi_symbols=public_symbols)
+                entry['expected']=dict(min_checks=len(abi_declared),abi_symbols=abi_declared)
             else:
-                single=f.endswith('f'); binary_arg=f=='pow'; sew=32 if single else 64
+                single=f.endswith('f'); binary_arg=f in ('pow','powf'); sew=32 if single else 64
                 defs=['-DFUNC='+f,f'-DFLOAT_INPUT={int(single)}',f'-DBINARY_INPUT={int(binary_arg)}']
                 for mode in modes:
                     obj=dest/(mode+'.o'); objs.append(obj)
@@ -177,6 +199,15 @@ def main():
                     if mode.startswith(('auto','direct')):
                         expected=direct_symbol(f,mode,a.direct_interface if mode.startswith('direct') else 'nx')
                         if not re.search(r'R_RISCV_CALL(?:_PLT)?\s+'+re.escape(expected)+r'\b',dis):
+                            if mode.startswith('auto') and f not in GCC_ABI_FUNCTIONS:
+                                # Honest negative result: the installed compiler
+                                # has no vector-math ABI entry for this function,
+                                # so the auto_* mode is the scalar loop.  Record
+                                # it instead of failing or faking a vector call.
+                                entry.setdefault('auto_vectorization',{})[mode]=(
+                                    'unavailable: compiler riscv_simd_math_table has no '
+                                    + f + ' entry; loop compiled scalar')
+                                continue
                             raise RuntimeError(f'{mode} missing actual call {expected}')
                         seen=set(re.findall(r'_ZGV\w+|\b\w+vec_m[12]\b',dis))
                         allowed={expected}

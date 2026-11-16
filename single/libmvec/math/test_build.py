@@ -109,7 +109,8 @@ class BuildTests(unittest.TestCase):
                         build.check_macros(macros, unit, variant)
         other_units = set(build.select_units(list(build.FUNCTION_UNITS))) - set(build.FUNCTION_UNITS['log'])
         kernels = {'expvec': 'exp', 'expfvec': 'expf', 'logfvec': 'logf',
-                   'powvec': 'pow', 'sinvec': 'sin', 'cosvec': 'cos'}
+                   'powvec': 'pow', 'sinvec': 'sin', 'cosvec': 'cos',
+                   'sinfvec': 'sinf', 'cosfvec': 'cosf'}
         for unit in other_units:
             if unit.endswith('vec_data'):
                 expected = {'baseline': [], 'cold': [], 'lifetime': []}
