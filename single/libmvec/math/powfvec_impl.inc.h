@@ -102,6 +102,24 @@ static __attribute__((always_inline)) inline DV POWF_CAT(CORE,_exp2)(DV xd, size
   return D(vfmul_vv)(y, s, vl);
 }
 
+/* Out-of-line slow path: any lane that the scalar implementation would take
+   (x <= 0 / subnormal / inf / nan, y == 0 / inf / nan, |y*log2 x| >= ~126)
+   sends the whole register here.  Every lane is then evaluated by the scalar
+   powf, which is bit-for-bit the tolerance-verified reference and supplies the
+   C99 flags/errno for the slow cases; warm lanes in a mixed register lose only
+   speed, never accuracy.  Keeping this out of line is what keeps the hot path
+   small (inline version: 302 instructions and 41 stack references). */
+static __attribute__((noinline,noclone,riscv_vector_cc)) FV
+POWF_CAT(CORE,_slow)(FV a, FV b, size_t vl)
+{
+  float xo[vl], yo[vl], vals[vl];
+  F(vse32_v)(xo, a, vl);
+  F(vse32_v)(yo, b, vl);
+  for (size_t i = 0; i < vl; ++i)
+    vals[i] = powf(xo[i], yo[i]);
+  return F(vle32_v)(vals, vl);
+}
+
 static __attribute__((always_inline)) inline FV CORE(FV a, FV b, size_t vl)
 {
   /* Entries compute the RNE result whatever frm the caller selected and
@@ -133,18 +151,7 @@ static __attribute__((always_inline)) inline FV CORE(FV a, FV b, size_t vl)
     out = NARROW(POWF_CAT(CORE,_exp2)(ex, vl), vl);
     size_t ns = MM(vcpop_m)(slow, vl);
     if (__builtin_expect(ns != 0, 0))
-      {
-        float xo[vl], yo[vl], vals[vl];
-        uint8_t sbit[(vl + 7) / 8];
-        F(vse32_v)(xo, a, vl);
-        F(vse32_v)(yo, b, vl);
-        F(vse32_v)(vals, out, vl);
-        VSM(sbit, slow, vl);
-        for (size_t i = 0; i < vl; ++i)
-          if ((sbit[i >> 3] >> (i & 7)) & 1u)
-            vals[i] = powf(xo[i], yo[i]);
-        out = F(vle32_v)(vals, vl);
-      }
+      out = POWF_CAT(CORE,_slow)(a, b, vl);
   }
   __asm__ volatile ("fsrm %0" : : "r" (frm) : "memory");
   return out;

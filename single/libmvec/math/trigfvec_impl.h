@@ -32,6 +32,17 @@
      subnormal y; cosf returns 1 for |y| < 2^-12.  Both are replicated,
      including the scalar's underflow-forcing narrow.
 
+   Build recipe (performance)
+   -------------------------
+   The measured matrix builds these units with -DSIXMATH_COLD_DISPATCH: the
+   scalar fallback then lives in a separate noinline function and the native
+   entry shrinks from 259/316 instructions (baseline, 39/… stack references) to
+   130/185 (18/32).  The seven-function baseline used the same cold-dispatch
+   contract for exp/expf/logf/pow and plain baseline for double sin/cos; the
+   float entries follow the expf/logf choice because their scalar fallback is
+   also the inf/nan lane, and the float kernels are small enough that the inlined
+   fallback dominates the hot path.
+
    Accuracy contract
    -----------------
    Experimental RNE evaluation against the MPFR512 corpus
