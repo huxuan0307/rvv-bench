@@ -19,6 +19,8 @@
 #define SUB(a,b) FOP(vfsub_vf)(a,b,vl)
 #define FMA(a,b,c) FOP(vfmadd_vv)(a,b,c,vl)
 #define FMAF(a,b,c) FOP(vfmadd_vf)(a,b,c,vl)
+#define MACC(a,b,c) FOP(vfmacc_vv)(a,b,c,vl)
+#define MACCF(a,b,c) FOP(vfmacc_vf)(a,b,c,vl)
 
 #ifdef LOGVEC_BASELINE
 static __attribute__((always_inline)) inline FV CORE(FV a, size_t vl)
@@ -129,8 +131,9 @@ static __attribute__((always_inline)) inline FV CORE(FV a, size_t vl)
         /* Unsigned interval classification also rejects every negative lane.
            No floating-point operation touches signaling NaNs before fallback. */
         UV cls=UOP(vsub_vx)(bits,UINT64_C(0x0010000000000000),vl);
-        BV special=UCMPLT(cls,UINT64_C(0x7fe0000000000000),vl);
-        special=MOP(vmnot_m)(special,vl);
+        /* cls is in [0,0x7fe0...) for normal values, so the "not normal" mask is a
+           single unsigned > compare: saves the vmnot of the < form. */
+        BV special=UCMPGT(cls,UINT64_C(0x7fdfffffffffffff),vl);
         UV ix=bits;
         UV delta=UOP(vsub_vx)(ix,UINT64_C(0x3fee000000000000),vl);
         BV near=UCMPLT(delta,UINT64_C(0x0003090000000000),vl);
@@ -139,19 +142,38 @@ static __attribute__((always_inline)) inline FV CORE(FV a, size_t vl)
         long first=MOP(vfirst_m)(cold,vl);
         if (__builtin_expect(first>=0,0))
             return CAT2(CORE,_cold)(a,vl);
-#ifdef LOGVEC_HOT_LIFETIME
+#if defined(LOGVEC_HOT_LIFETIME) && !defined(LOGVEC_NO_BARRIER)
         /* End dispatch temporaries before allocating destructive hot operands. */
         __asm__ volatile("" : "+vr"(a));
         ix=REINTERPRET_FU(a);
 #endif
         UV tmp=UOP(vsub_vx)(ix,UINT64_C(0x3fe6000000000000),vl);
-        UV index=UOP(vand_vx)(UOP(vsrl_vx)(tmp,45,vl),127,vl);
-        UV byte_index=UOP(vsll_vx)(index,4,vl);
-        FV invc=GATHER(&logvec_data.tab[0].invc,byte_index,vl);
-        FV logc=GATHER(&logvec_data.tab[0].logc,byte_index,vl);
+        /* ((tmp>>45)&127)<<4 == (tmp>>41)&0x7f0 */
+        UV byte_index=UOP(vand_vx)(UOP(vsrl_vx)(tmp,41,vl),UINT64_C(0x7f0),vl);
+        const double *tabp=(const double *)&logvec_data.tab[0].invc;
+        /* second gather = tabp+1 element: GCC folds this into the addressing mode
+           without an explicit asm addi (the asm variant cost an extra vsetvli). */
+        FV invc=GATHER(tabp,byte_index,vl);
+        FV logc=GATHER(tabp+1,byte_index,vl);
         UV iz=UOP(vsub_vv)(ix,UOP(vand_vx)(tmp,UINT64_C(0xfff0000000000000),vl),vl);
         IV k=IOP(vsra_vx)(REINTERPRET_UI(tmp),52,vl);
         FV kd=CONVERT(k,vl);
+#if defined(LOGVEC_USE_MACC)
+        FV z=REINTERPRET_UF(iz);
+        /* vfmacc(acc, x, y) = acc + x*y keeps the multiplicands intact, so the
+           vmv1r copies GCC needs for destructive vfmadd disappear. The addend is
+           always the dead broadcast / result register. */
+        FV r=MACC(FOP(vfmv_v_f)(-1.0,vl),invc,z);
+        FV w=MACCF(logc,logvec_data.ln2hi,kd);
+        FV hi=FA(w,r);
+        FV lo=MACCF(FA(FS(w,hi),r),logvec_data.ln2lo,kd);
+        FV r2=FM(r,r);
+        FV p=MACCF(FOP(vfmv_v_f)(logvec_data.poly[3],vl),logvec_data.poly[4],r);
+        FV q=MACCF(FOP(vfmv_v_f)(logvec_data.poly[1],vl),logvec_data.poly[2],r);
+        p=MACC(q,r2,p);           /* q + r2*p, i.e. fma(r2,p,q) */
+        lo=MACCF(lo,logvec_data.poly[0],r2);
+        FV result=FA(MACC(lo,p,FM(r,r2)),hi);
+#else
         FV z=REINTERPRET_UF(iz);
         FV r=FMA(z,invc,FOP(vfmv_v_f)(-1.0,vl));
         FV w=FMAF(kd,logvec_data.ln2hi,logc);
@@ -163,6 +185,7 @@ static __attribute__((always_inline)) inline FV CORE(FV a, size_t vl)
         p=FMA(r2,p,q);
         lo=FMAF(r2,logvec_data.poly[0],lo);
         FV result=FA(FMA(FM(r,r2),p,lo),hi);
+#endif
 
     return result;
 }

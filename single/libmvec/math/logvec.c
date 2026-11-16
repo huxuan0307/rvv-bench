@@ -28,6 +28,7 @@
 #define REINTERPRET_UF __riscv_vreinterpret_v_u64m1_f64m1
 #define REINTERPRET_UI __riscv_vreinterpret_v_u64m1_i64m1
 #define UCMPLT __riscv_vmsltu_vx_u64m1_b64
+#define UCMPGT __riscv_vmsgtu_vx_u64m1_b64
 #define GATHER __riscv_vluxei64_v_f64m1
 #define CONVERT __riscv_vfcvt_f_x_v_f64m1
 /* Only m1 array may opt into the full inline baseline core.  Defining the
@@ -35,7 +36,11 @@
 #if defined(LOGVEC_ARRAY_M1_BASELINE) && LOGVEC_ARRAY_M1_BASELINE && !defined(LOGVEC_BASELINE)
 #define LOGVEC_M1_ARRAY_FULL 1
 #endif
+#define LOGVEC_NO_BARRIER 1
+#define LOGVEC_USE_MACC 1
 #include "logvec_impl.inc.h"
+#undef LOGVEC_USE_MACC
+#undef LOGVEC_NO_BARRIER
 #undef LOGVEC_M1_ARRAY_FULL
 #undef ENTRY
 #undef CORE
@@ -57,6 +62,7 @@
 #undef REINTERPRET_UF
 #undef REINTERPRET_UI
 #undef UCMPLT
+#undef UCMPGT
 #undef GATHER
 #undef CONVERT
 #define ENTRY logvec_m2
@@ -79,6 +85,7 @@
 #define REINTERPRET_UF __riscv_vreinterpret_v_u64m2_f64m2
 #define REINTERPRET_UI __riscv_vreinterpret_v_u64m2_i64m2
 #define UCMPLT __riscv_vmsltu_vx_u64m2_b32
+#define UCMPGT __riscv_vmsgtu_vx_u64m2_b32
 #define GATHER __riscv_vluxei64_v_f64m2
 #define CONVERT __riscv_vfcvt_f_x_v_f64m2
 #include "logvec_impl.inc.h"
