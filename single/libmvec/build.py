@@ -50,7 +50,7 @@ def main():
     parser.add_argument('--prefix',type=Path,required=True)
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--data-dir',type=Path,required=True,help='explicit shared frozen perf input headers')
-    parser.add_argument('--case',action='append',choices=[*FUNCS,'abi-public'],required=True)
+    parser.add_argument('--case',action='append',choices=[*FUNCS,'abi-public','float3-unit'],required=True)
     parser.add_argument('--profile',choices=['full','format-smoke','n16','grid'],default='n16',
                         help='grid uses explicit lengths/batches and retains all nine modes and ten rounds')
     parser.add_argument('--lengths',type=lambda s:grid_values(s,max_value=1024))
@@ -72,7 +72,7 @@ def main():
     if a.profile!='grid' and (a.lengths or a.batches): parser.error('--lengths and --batches require --profile grid')
     if not 1<=a.timing_repeat<=64: parser.error('--timing-repeat must be in [1,64]')
     for f in a.case:
-        if f!='abi-public' and not (data_dir/(f+'.h')).is_file():
+        if f not in ('abi-public','float3-unit') and not (data_dir/(f+'.h')).is_file():
             parser.error('missing frozen input header for '+f)
     modes=MODES
     controls=['rdcycle','empty','copy']
@@ -117,8 +117,8 @@ def main():
         missing=sorted(required-available)
         if missing: raise RuntimeError(f'array interface symbols missing from {archive}: {", ".join(missing)}')
     version=run([cc,'--version'],'compiler-version').splitlines()[0]
-    oracle={'kind':'explicit shared frozen headers','functions':{f:identity(data_dir/(f+'.h')) for f in selected if f!='abi-public'}}
-    paths=list(HERE.glob('*.c'))+list(HERE.glob('*.h'))+list(HERE.glob('*.py'))+[HERE/'PROTOCOL.md',HERE/'tls-safe.ld',HERE/'overlay/bits/math-vector.h',ROOT/'autovec/av_runtime.c',ROOT/'autovec/av_runtime.h',ROOT/'single/veclibm-runtime.c',ROOT/'autovec/tls.ld',ROOT/'thirdparty/link.ld']
+    oracle={'kind':'explicit shared frozen headers','functions':{f:identity(data_dir/(f+'.h')) for f in selected if f not in ('abi-public','float3-unit')}}
+    paths=list(HERE.glob('*.c'))+list(HERE.glob('*.h'))+list(HERE.glob('*.py'))+[HERE/'tests/newmath/unit/float3_unit.c',HERE/'PROTOCOL.md',HERE/'tls-safe.ld',HERE/'overlay/bits/math-vector.h',ROOT/'autovec/av_runtime.c',ROOT/'autovec/av_runtime.h',ROOT/'single/veclibm-runtime.c',ROOT/'autovec/tls.ld',ROOT/'thirdparty/link.ld']
     snap=out/'source'; snap.mkdir()
     source_ids={}
     for path in paths:
@@ -149,9 +149,9 @@ def main():
     def save(): (out/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
     save()
     for f in selected:
-        name='abi-public' if f=='abi-public' else 'perf-'+f
+        name=f if f in ('abi-public','float3-unit') else 'perf-'+f
         dest=out/name; dest.mkdir(); elf=dest/(name+'.elf'); binary=elf.with_suffix('.bin')
-        entry=dict(name=name,suite='accuracy' if f=='abi-public' else 'performance',status='failed',
+        entry=dict(name=name,suite='accuracy' if f in ('abi-public','float3-unit') else 'performance',status='failed',
             bin=str(binary.relative_to(out)),elf=str(elf.relative_to(out)),required_markers=[f'LIBMVEC_COMPLETE case={name} status=pass'])
         try:
             objs=[]; defs=[]
@@ -168,6 +168,16 @@ def main():
                 if missing: raise RuntimeError('abi-public symbols not provided: '+', '.join(missing))
                 obj=dest/'abi.o'; run([cc,*common,'-fno-fast-math','-fno-tree-vectorize','-c',source_here/'abi.c','-o',obj],name+'/compile'); objs.append(obj)
                 entry['expected']=dict(min_checks=len(abi_declared),abi_symbols=abi_declared)
+            elif f=='float3-unit':
+                # Direct unit test of the array entries; it emits its own
+                # LIBMVEC_CHECK/LIBMVEC_COMPLETE records and no LIBMVEC_ABI
+                # records, so abi_symbols stays empty.
+                obj=dest/'float3_unit.o'
+                run([cc,*common,'-I'+str(source_here/'tests/newmath/unit'),
+                     '-fno-fast-math','-fno-tree-vectorize','-c',
+                     source_here/'tests/newmath/unit/float3_unit.c','-o',obj],name+'/compile')
+                objs.append(obj)
+                entry['expected']=dict(min_checks=1,abi_symbols=[])
             else:
                 single=f.endswith('f'); binary_arg=f in ('pow','powf'); sew=32 if single else 64
                 defs=['-DFUNC='+f,f'-DFLOAT_INPUT={int(single)}',f'-DBINARY_INPUT={int(binary_arg)}']
@@ -261,7 +271,7 @@ def main():
             if 'INTERP' in headers or '(NEEDED)' in headers or not re.search(r'Entry point address:\s+0x80000000\b',headers):
                 raise RuntimeError('invalid bare-metal ELF entry/loader')
             linked_disassembly=run([tools['objdump'],'-d',elf],name+'/disassembly')
-            if a.lto and f!='abi-public':
+            if a.lto and f not in ('abi-public','float3-unit'):
                 # Record the real final-code result, including clones/internalization.
                 nx_symbols=[f'_ZGV{i}Nx'+('vv' if binary_arg else 'v')+'_'+f for i in (1,2)]
                 array_symbols=[f+'vec_m'+str(i) for i in (1,2)]

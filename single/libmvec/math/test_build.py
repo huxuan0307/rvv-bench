@@ -110,7 +110,7 @@ class BuildTests(unittest.TestCase):
         other_units = set(build.select_units(list(build.FUNCTION_UNITS))) - set(build.FUNCTION_UNITS['log'])
         kernels = {'expvec': 'exp', 'expfvec': 'expf', 'logfvec': 'logf',
                    'powvec': 'pow', 'sinvec': 'sin', 'cosvec': 'cos',
-                   'sinfvec': 'sinf', 'cosfvec': 'cosf'}
+                   'sinfvec': 'sinf', 'cosfvec': 'cosf', 'powfvec': 'powf'}
         for unit in other_units:
             if unit.endswith('vec_data'):
                 expected = {'baseline': [], 'cold': [], 'lifetime': []}
