@@ -4,7 +4,10 @@
    These entries do not themselves access frm.
    Array n==0 accepts null pointers. Exact in-place arrays are supported;
    partial overlap is not. Unary entries ignore the third argument.
-   Nx entries process the complete VLMAX regardless of incoming vl. */
+   Nx entries process the complete VLMAX regardless of incoming vl.
+   The float sinf/cosf/powf candidates provide only the unmasked N-type
+   entries (m1/m2 x fixed/Nx).  Masked variants (_ZGV1M4v_sinf,
+   _ZGV2Mxvv_powf, ...) are NOT implemented; do not assume they exist. */
 #ifndef EXPERIMENTAL_SHARED_NEWLIB_H
 #define EXPERIMENTAL_SHARED_NEWLIB_H
 #include <stddef.h>
@@ -24,6 +27,7 @@ NEWLIB_ARRAY(expf,float);
 NEWLIB_ARRAY(logf,float);
 NEWLIB_ARRAY(sinf,float);
 NEWLIB_ARRAY(cosf,float);
+NEWLIB_ARRAY(powf,float);
 #undef NEWLIB_ARRAY
 #define NEWLIB_NX_UNARY(name,type1,type2) \
 __attribute__((riscv_vector_cc)) type1 _ZGV1Nxv_##name(type1); \
@@ -37,6 +41,8 @@ NEWLIB_NX_UNARY(expf,vfloat32m1_t,vfloat32m2_t);
 NEWLIB_NX_UNARY(sinf,vfloat32m1_t,vfloat32m2_t);
 NEWLIB_NX_UNARY(cosf,vfloat32m1_t,vfloat32m2_t);
 #undef NEWLIB_NX_UNARY
+__attribute__((riscv_vector_cc)) vfloat32m1_t _ZGV1Nxvv_powf(vfloat32m1_t,vfloat32m1_t);
+__attribute__((riscv_vector_cc)) vfloat32m2_t _ZGV2Nxvv_powf(vfloat32m2_t,vfloat32m2_t);
 __attribute__((riscv_vector_cc)) vfloat64m1_t _ZGV1Nxvv_pow(vfloat64m1_t,vfloat64m1_t);
 __attribute__((riscv_vector_cc)) vfloat64m2_t _ZGV2Nxvv_pow(vfloat64m2_t,vfloat64m2_t);
 #ifdef __cplusplus

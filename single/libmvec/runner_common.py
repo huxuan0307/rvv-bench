@@ -34,8 +34,8 @@ PHASES = {'first': 1, 'warmup': 2, 'steady': 7}
 PLAN_PHASE_ORDER = ('first', 'warmup', 'steady')
 ROUND_BASE = {'first': 0, 'warmup': 1, 'steady': 3}
 PERF_FUNCTIONS = ('log', 'exp', 'sin', 'cos', 'pow', 'logf', 'expf',
-                   'sinf', 'cosf')
-BINARY_FUNCTIONS = ('pow',)
+                   'sinf', 'cosf', 'powf')
+BINARY_FUNCTIONS = ('pow', 'powf')
 U64_MAX = (1 << 64) - 1
 REFERENCE_REQUIRED_SYMBOLS = (
     'difftest_init', 'difftest_memcpy', 'difftest_regcpy', 'difftest_exec')

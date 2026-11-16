@@ -18,6 +18,7 @@
 # undef __DECL_SIMD_expf
 # undef __DECL_SIMD_sinf
 # undef __DECL_SIMD_cosf
+# undef __DECL_SIMD_powf
 # define __DECL_SIMD_log RVV_BENCH_NX_ONLY
 # define __DECL_SIMD_exp RVV_BENCH_NX_ONLY
 # define __DECL_SIMD_sin RVV_BENCH_NX_ONLY
@@ -27,4 +28,5 @@
 # define __DECL_SIMD_expf RVV_BENCH_NX_ONLY
 # define __DECL_SIMD_sinf RVV_BENCH_NX_ONLY
 # define __DECL_SIMD_cosf RVV_BENCH_NX_ONLY
+# define __DECL_SIMD_powf RVV_BENCH_NX_ONLY
 #endif

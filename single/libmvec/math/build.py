@@ -54,6 +54,7 @@ FUNCTION_UNITS = {
     'cos': ('cosvec', 'trigvec_data'),
     'sinf': ('sinfvec', 'sincosfvec_data'),
     'cosf': ('cosfvec', 'sincosfvec_data'),
+    'powf': ('powfvec', 'powfvec_data', 'expfvec_data'),
 }
 INCLUDE = re.compile(r'^\s*#\s*include\s*"([^"\n]+)"', re.MULTILINE)
 DATE_DIR = re.compile(r'\d{8}[-_]\d{6}')

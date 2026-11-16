@@ -8,6 +8,11 @@
  *   sin/cos/pow  m1/m2 x fixed/Nx unmasked            (4 + 4 + 4)
  *   logf/expf    m1/m2 x fixed/Nx unmasked            (4 + 4)
  *   sinf/cosf    m1/m2 x fixed/Nx unmasked            (4 + 4)   [candidates]
+ *   powf         m1/m2 x fixed/Nx unmasked            (4)       [candidates]
+ *
+ * The float candidates intentionally have no masked entries; the masked
+ * semantics test below therefore never runs for them.  This is a known gap of
+ * the candidate library, not a hole in the suite.
  *
  * Each entry is called directly through its native RVV intrinsic type with
  * the vector calling convention.  The checks cover:
@@ -97,6 +102,11 @@ extern vfloat32m1_t _ZGV1N4v_cosf (vfloat32m1_t) RVV_CC;
 extern vfloat32m1_t _ZGV1Nxv_cosf (vfloat32m1_t) RVV_CC;
 extern vfloat32m2_t _ZGV2N8v_cosf (vfloat32m2_t) RVV_CC;
 extern vfloat32m2_t _ZGV2Nxv_cosf (vfloat32m2_t) RVV_CC;
+
+extern vfloat32m1_t _ZGV1N4vv_powf (vfloat32m1_t, vfloat32m1_t) RVV_CC;
+extern vfloat32m1_t _ZGV1Nxvv_powf (vfloat32m1_t, vfloat32m1_t) RVV_CC;
+extern vfloat32m2_t _ZGV2N8vv_powf (vfloat32m2_t, vfloat32m2_t) RVV_CC;
+extern vfloat32m2_t _ZGV2Nxvv_powf (vfloat32m2_t, vfloat32m2_t) RVV_CC;
 
 /* ------------------------------------------------------------------ */
 /* CSR helpers and bit utilities.                                     */
@@ -338,6 +348,23 @@ DEF_U64 (m1, _ZGV1Nxv_cos)
 DEF_U64 (m2, _ZGV2N4v_cos)
 DEF_U64 (m2, _ZGV2Nxv_cos)
 
+#define DEF_B32(LM, SYM)                                                 \
+  static void b_##SYM (const float *x, const float *y, size_t vl,        \
+                       float *out)                                       \
+  {                                                                      \
+    vfloat32##LM##_t vx = __riscv_vle32_v_f32##LM (x, vl);               \
+    vfloat32##LM##_t vy = __riscv_vle32_v_f32##LM (y, vl);               \
+    if (abi_perturb_vl)                                                  \
+      ABI_VSETIVLI (32, LM);                                             \
+    vfloat32##LM##_t r = SYM (vx, vy);                                   \
+    __riscv_vse32_v_f32##LM (out, r, vl);                                \
+  }
+
+DEF_B32 (m1, _ZGV1N4vv_powf)
+DEF_B32 (m1, _ZGV1Nxvv_powf)
+DEF_B32 (m2, _ZGV2N8vv_powf)
+DEF_B32 (m2, _ZGV2Nxvv_powf)
+
 DEF_B64 (m1, _ZGV1N2vv_pow)
 DEF_B64 (m1, _ZGV1Nxvv_pow)
 DEF_B64 (m2, _ZGV2N4vv_pow)
@@ -369,6 +396,7 @@ DEF_U32 (m2, _ZGV2Nxv_cosf)
 typedef void (*u64_fn) (const double *, size_t, double *);
 typedef void (*u32_fn) (const float *, size_t, float *);
 typedef void (*b64_fn) (const double *, const double *, size_t, double *);
+typedef void (*b32_fn) (const float *, const float *, size_t, float *);
 typedef void (*m64_fn) (const uint8_t *, const double *, size_t, double *);
 typedef void (*m32_fn) (const uint8_t *, const float *, size_t, float *);
 
@@ -382,6 +410,7 @@ struct symdesc
   u64_fn u64;
   u32_fn u32;
   b64_fn b64;
+  b32_fn b32;
   m64_fn m64;
   m32_fn m32;
 };
@@ -395,6 +424,7 @@ struct symdesc
 #define ABI_CASES_expf ABI_CASES_EXPF
 #define ABI_CASES_sinf ABI_CASES_SINF
 #define ABI_CASES_cosf ABI_CASES_COSF
+#define ABI_CASES_powf ABI_CASES_POWF
 
 #define ABI_ULP_log ABI_ULP_LOG
 #define ABI_ULP_exp ABI_ULP_EXP
@@ -405,6 +435,7 @@ struct symdesc
 #define ABI_ULP_expf ABI_ULP_EXPF
 #define ABI_ULP_sinf ABI_ULP_SINF
 #define ABI_ULP_cosf ABI_ULP_COSF
+#define ABI_ULP_powf ABI_ULP_POWF
 
 #define SYM_U64(NAME, LM, FIXED, LANES, SYMBOL, FAM) \
   { .name = NAME, .fam = #FAM, .single = 0, .masked = 0, .fixed = FIXED, \
@@ -421,6 +452,11 @@ struct symdesc
     .binary = 0, .lmul = LM, .fixed_lanes = LANES, .ulp = ABI_ULP_##FAM, \
     .cases = abi_cases_##FAM, .ncases = ABI_CASES_##FAM, \
     .m64 = m_##SYMBOL }
+#define SYM_B32(NAME, LM, FIXED, LANES, SYMBOL, FAM) \
+  { .name = NAME, .fam = #FAM, .single = 1, .masked = 0, .fixed = FIXED, \
+    .binary = 1, .lmul = LM, .fixed_lanes = LANES, .ulp = ABI_ULP_##FAM, \
+    .cases = abi_cases_##FAM, .ncases = ABI_CASES_##FAM, \
+    .b32 = b_##SYMBOL }
 #define SYM_U32(NAME, LM, FIXED, LANES, SYMBOL, FAM) \
   { .name = NAME, .fam = #FAM, .single = 1, .masked = 0, .fixed = FIXED, \
     .binary = 0, .lmul = LM, .fixed_lanes = LANES, .ulp = ABI_ULP_##FAM, \
@@ -480,6 +516,11 @@ static const struct symdesc syms[] = {
   SYM_U32 ("_ZGV1Nxv_cosf", 1, 0, 0, _ZGV1Nxv_cosf, cosf),
   SYM_U32 ("_ZGV2N8v_cosf", 2, 1, 8, _ZGV2N8v_cosf, cosf),
   SYM_U32 ("_ZGV2Nxv_cosf", 2, 0, 0, _ZGV2Nxv_cosf, cosf),
+
+  SYM_B32 ("_ZGV1N4vv_powf", 1, 1, 4, _ZGV1N4vv_powf, powf),
+  SYM_B32 ("_ZGV1Nxvv_powf", 1, 0, 0, _ZGV1Nxvv_powf, powf),
+  SYM_B32 ("_ZGV2N8vv_powf", 2, 1, 8, _ZGV2N8vv_powf, powf),
+  SYM_B32 ("_ZGV2Nxvv_powf", 2, 0, 0, _ZGV2Nxvv_powf, powf),
 };
 
 #define NSYMS (sizeof syms / sizeof syms[0])
@@ -653,7 +694,9 @@ mask_fill (uint8_t *mb, size_t vl, int mode, size_t first_valid)
 static void
 apply_call (const struct symdesc *s, const uint8_t *mb, size_t vl, size_t off)
 {
-  if (s->single)
+  if (s->single && s->binary)
+    s->b32 (abi_x.f + off, abi_y.f + off, vl, abi_o.f + off);
+  else if (s->single)
     s->u32 (abi_x.f + off, vl, abi_o.f + off);
   else if (s->masked)
     s->m64 (mb, abi_x.d + off, vl, abi_o.d + off);

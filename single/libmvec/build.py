@@ -12,10 +12,10 @@ import shlex
 
 HERE=Path(__file__).resolve().parent
 ROOT=HERE.parents[1]
-FUNCS=('log','exp','sin','cos','pow','logf','expf','sinf','cosf')
+FUNCS=('log','exp','sin','cos','pow','logf','expf','sinf','cosf','powf')
 # Functions that only exist in an explicit replacement math archive (the
 # installed libmvec has no float sin/cos/pow); they extend the ABI suite.
-NEW_ONLY=('sinf','cosf')
+NEW_ONLY=('sinf','cosf','powf')
 # Functions with an entry in the installed compiler's riscv_simd_math_table,
 # i.e. the ones auto-vectorized code can call.  The new float entries have no
 # compiler ABI yet, so their auto_* modes measure the scalar code GCC emits.
