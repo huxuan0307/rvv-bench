@@ -16,6 +16,8 @@
 | 验收运行结果并导出样本 | [collect.py](collect.py) | --run、--require-complete | 完整性及退出状态验收，展开逐轮样本；不运行仿真 |
 | 运行历史完整批次调度 | [node_campaign.py](node_campaign.py) | --manifest、--nemu-run、--output、--emu、--reference | 会启动ABI、七函数及复跑阶段；不用于直接启动当前log优化迭代 |
 | 将任务代码移出归档树 | [archive_task_code.py](archive_task_code.py) | --tasks、--archive、--manifest | 默认只生成计划；--apply 实际移动文件，校验SHA；维护用途，不参与性能测试 |
+| 生成纯 vfmacc 链标定内核 | [gen_pipe.py](gen_pipe.py) | --output、--chain | 覆盖 LMUL1/2/4/8 × 累加器1–32 的标定源码 pipe_calib.c；单文件生成，确定性输出 |
+| 构建标定镜像 | [build_pipe.py](build_pipe.py) | --prefix、--output（带日期时间的新目录） | 裸机 ELF/BIN、反汇编、链接 trace 与 manifest；只做标定，不参与被测矩阵 |
 
 完整原基准工具说明见 [README.zh.md](README.zh.md)，正确性命令见 [测试README](tests/newmath/README.zh.md)，汇总格式与边界见 [分析README](analysis_newmath/README.zh.md)。
 

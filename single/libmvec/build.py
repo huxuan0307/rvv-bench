@@ -21,6 +21,9 @@ NEW_ONLY=('sinf','cosf','powf')
 # compiler ABI yet, so their auto_* modes measure the scalar code GCC emits.
 GCC_ABI_FUNCTIONS=('log','exp','sin','cos','pow','logf','expf')
 MODES=['scalar_strict','scalar_fast','auto_m1','auto_m2','direct_m1','direct_m2']
+MODES_LMUL48=['direct_m4','direct_m8']
+REQUIRED_PUBLIC=sum(([f'_ZGV{i}Nx{kind}_{f}' for i in (1,2)]
+                     for kind,f in ((('vv' if f=='pow' else 'v'),f) for f in FUNCS)),[])
 
 def sha(p):
     h=hashlib.sha256()
@@ -52,7 +55,7 @@ def main():
     parser.add_argument('--data-dir',type=Path,required=True,help='explicit shared frozen perf input headers')
     parser.add_argument('--case',action='append',choices=[*FUNCS,'abi-public','float3-unit'],required=True)
     parser.add_argument('--profile',choices=['full','format-smoke','n16','grid'],default='n16',
-                        help='grid uses explicit lengths/batches and retains all nine modes and ten rounds')
+                        help='grid uses explicit lengths/batches and retains the full mode matrix and ten rounds')
     parser.add_argument('--lengths',type=lambda s:grid_values(s,max_value=1024))
     parser.add_argument('--batches',type=lambda s:grid_values(s,max_value=1000000))
     parser.add_argument('--math-archive',type=Path,help='explicit replacement math archive; retain installed scalar libm')
@@ -134,6 +137,21 @@ def main():
         required={f+'vec_'+mode for f in selected if f!='abi-public' for mode in ('m1','m2')}
         missing=sorted(required-available)
         if missing: raise RuntimeError(f'array interface symbols missing from {archive}: {", ".join(missing)}')
+    else:
+        # Symbol set of the archive that actually supplies the direct kernels.
+        archive=a.math_archive.resolve() if a.math_archive else libs['libmvec.a']
+        gcc_nm=prefix/'bin/riscv64-unknown-linux-gnu-gcc-nm'
+        symbol_text=run([gcc_nm,'-g','--defined-only',archive],'archive-symbols')
+        available=set(re.findall(r'\b([A-Za-z_]\w*)\s*$',symbol_text,re.M))
+    def extended_modes(function):
+        """Append direct_m4/direct_m8 only when both kernels exist."""
+        if a.direct_interface=='array':
+            have=all(function+'vec_'+lmul in available for lmul in ('m4','m8'))
+        else:
+            kind='vv' if function=='pow' else 'v'
+            have=all(f'_ZGV{lmul[-1]}Nx{kind}_{function}' in available
+                     for lmul in ('m4','m8'))
+        return MODES+MODES_LMUL48 if have else list(MODES)
     version=run([cc,'--version'],'compiler-version').splitlines()[0]
     oracle={'kind':'explicit shared frozen headers','functions':{f:identity(data_dir/(f+'.h')) for f in selected if f not in ('abi-public','float3-unit')}}
     paths=list(HERE.glob('*.c'))+list(HERE.glob('*.h'))+list(HERE.glob('*.py'))+[HERE/'tests/newmath/unit/float3_unit.c',HERE/'PROTOCOL.md',HERE/'tls-safe.ld',HERE/'overlay/bits/math-vector.h',ROOT/'autovec/av_runtime.c',ROOT/'autovec/av_runtime.h',ROOT/'single/veclibm-runtime.c',ROOT/'autovec/tls.ld',ROOT/'thirdparty/link.ld']
@@ -152,7 +170,7 @@ def main():
         created_at=datetime.now(timezone.utc).isoformat(), toolchain=dict(prefix=str(prefix),version=version,sysroot=str(sysroot),library_location_note=outside,
         tools={n:identity(p) for n,p in tools.items()},libraries={n:identity(p) for n,p in libs.items()},
         headers={str(p.relative_to(sysroot)):identity(p) for p in [sysroot/'usr/include/math.h',sysroot/'usr/include/bits/math-vector.h']}),
-        sources=source_ids,oracle=oracle,
+        sources=source_ids,oracle=oracle,library_extra_symbols=library_extra_symbols,
         support_archives={str(p.relative_to(ROOT)):identity(p) for p in [ROOT/'thirdparty/am-riscv64-xs.a',ROOT/'thirdparty/klib-riscv64-xs.a']},cases=[])
     if a.math_archive:
         for name in ('entry_rne','tls_anchor'):
@@ -173,6 +191,7 @@ def main():
             bin=str(binary.relative_to(out)),elf=str(elf.relative_to(out)),required_markers=[f'LIBMVEC_COMPLETE case={name} status=pass'])
         try:
             objs=[]; defs=[]
+            modes=extended_modes(f) if f!='abi-public' else list(MODES)
             if f=='abi-public':
                 # Every entry abi.c declares must be provided by the installed
                 # libmvec or by the explicit math archive; the collector then
@@ -237,7 +256,7 @@ def main():
                                     + f + ' entry; loop compiled scalar')
                                 continue
                             raise RuntimeError(f'{mode} missing actual call {expected}')
-                        seen=set(re.findall(r'_ZGV\w+|\b\w+vec_m[12]\b',dis))
+                        seen=set(re.findall(r'_ZGV\w+|\b\w+vec_m[1248]\b',dis))
                         allowed={expected}
                         # GCC may vectorize the m2 remainder with a real m1 clone.
                         # Record it rather than mislabeling a valid epilogue as m2-only.
@@ -251,7 +270,8 @@ def main():
                     run([cc,*common,*defs,'-fno-fast-math','-fno-tree-vectorize','-fno-tree-loop-distribute-patterns','-c',source_here/'kernel-calibration.c','-o',obj],name+'/calibration')
                 obj=dest/'main.o'; objs.append(obj)
                 grid_flags=(['-DGRID_LENGTHS='+','.join(map(str,a.lengths)),'-DGRID_BATCHES='+','.join(map(str,a.batches))] if a.profile=='grid' else [])
-                run([cc,*common,*defs,*grid_flags,'-fno-fast-math','-fno-tree-vectorize',f'-DPILOT_BATCH={int(f in ("log","exp"))}',
+                run([cc,*common,*defs,*grid_flags,'-fno-fast-math','-fno-tree-vectorize',f'-DHARNESS_MODES={len(modes)}',
+                    f'-DPILOT_BATCH={int(f in ("log","exp"))}',
                     f'-DFORMAT_SMOKE={int(a.profile=="format-smoke")}', f'-DN16_ONLY={int(a.profile=="n16")}', '-DN16_TRIM=0',
                     f'-DTIMING_REPEAT={a.timing_repeat}',
                     '-DDATA_HEADER="'+str(data_dir/(f+'.h'))+'"','-c',source_here/'perf.c','-o',obj],name+'/main')

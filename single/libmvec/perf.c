@@ -23,7 +23,17 @@
 #define MODES 3
 #define CONTROLS 0
 #else
-#define MODES 6
+/* HARNESS_MODES selects the original six-mode matrix or its LMUL4/8
+   extension.  build.py sets it per case from the vector symbols actually
+   provided by the linked math archive, so a partial kernel set never
+   references a missing kernel. */
+#ifndef HARNESS_MODES
+#define HARNESS_MODES 6
+#endif
+#if HARNESS_MODES != 6 && HARNESS_MODES != 8
+#error "HARNESS_MODES must be 6 or 8"
+#endif
+#define MODES HARNESS_MODES
 #define CONTROLS 3
 #endif
 #define MAX_RECORDS (3*3*ROUNDS*(MODES+CONTROLS))
@@ -52,7 +62,7 @@
 #endif
 _Static_assert(WORK_COUNT<=DATA_COUNT, "input corpus too short");
 #if defined(GRID_LENGTHS) && (FORMAT_SMOKE || N16_TRIM)
-#error Custom grids require the full nine-mode harness and full input corpus
+#error Custom grids require the full mode matrix and full input corpus
 #endif
 static real_t x[WORK_COUNT] __attribute__((aligned(64)));
 static real_t z[WORK_COUNT] __attribute__((aligned(64)));
@@ -63,9 +73,21 @@ static uint64_t total_checks, failed;
 #if N16_TRIM
 static const kernel_fn funcs[MODES]={scalar_fast,direct_m1,direct_m2};
 static const char *names[MODES]={"scalar_fast","direct_m1","direct_m2"};
+#elif HARNESS_MODES == 8
+static const kernel_fn funcs[MODES]={scalar_strict,scalar_fast,auto_m1,auto_m2,direct_m1,direct_m2,direct_m4,direct_m8};
+static const char *names[MODES+CONTROLS]={"scalar_strict","scalar_fast","auto_m1","auto_m2","direct_m1","direct_m2","direct_m4","direct_m8","rdcycle","empty","copy"};
 #else
 static const kernel_fn funcs[MODES]={scalar_strict,scalar_fast,auto_m1,auto_m2,direct_m1,direct_m2};
 static const char *names[MODES+CONTROLS]={"scalar_strict","scalar_fast","auto_m1","auto_m2","direct_m1","direct_m2","rdcycle","empty","copy"};
+#endif
+/* Per-mode LMUL of the Nx/array entry; only used to probe VLMAX-adjacent
+   lengths.  auto_* keep their compile-time -mrvv-max-lmul value. */
+#if N16_TRIM
+static const unsigned mode_lmul[MODES]={1,1,2};
+#elif HARNESS_MODES == 8
+static const unsigned mode_lmul[MODES]={1,1,1,2,1,2,4,8};
+#else
+static const unsigned mode_lmul[MODES]={1,1,1,2,1,2};
 #endif
 struct record { uint64_t begin,end,checksum; unsigned n,k,mode,iteration,order; };
 static struct record records[MAX_RECORDS];
@@ -103,9 +125,9 @@ static void verify(unsigned mode,size_t n) {
         ++total_checks; bits_t got=getbits(output.y[i]);
         if(i>=n) { if(got!=GUARD) fail("tail-canary",mode,n,i,got,GUARD); continue; }
 #if !N16_TRIM
-        if(mode==7) { if(got!=GUARD) fail("empty-store",mode,n,i,got,GUARD); continue; }
-        if(mode==8) { if(got!=input_bits[i]) fail("copy",mode,n,i,got,input_bits[i]); continue; }
-        if(mode==6) { if(got!=GUARD) fail("rdcycle-store",mode,n,i,got,GUARD); continue; }
+        if(mode==MODES) { if(got!=GUARD) fail("rdcycle-store",mode,n,i,got,GUARD); continue; }
+        if(mode==MODES+1) { if(got!=GUARD) fail("empty-store",mode,n,i,got,GUARD); continue; }
+        if(mode==MODES+2) { if(got!=input_bits[i]) fail("copy",mode,n,i,got,input_bits[i]); continue; }
 #endif
         uint64_t a=ordered(got),b=ordered(reference_bits[i]);
         uint64_t distance=a>b?a-b:b-a;
@@ -119,9 +141,9 @@ static void record_sample(unsigned mode,unsigned n,unsigned k,unsigned iteration
     {
         kernel_fn fn=funcs[mode];
 #else
-    if(mode==6) { begin=cycle(); end=cycle(); }
+    if(mode==MODES) { begin=cycle(); end=cycle(); }
     else {
-        kernel_fn fn=mode<MODES?funcs[mode]:(mode==7?empty_kernel:copy_kernel);
+        kernel_fn fn=mode<MODES?funcs[mode]:(mode==MODES+1?empty_kernel:copy_kernel);
 #endif
         begin=cycle();
         for(unsigned rr=0;rr<TIMING_REPEAT;++rr)
@@ -153,6 +175,8 @@ __attribute__((noinline,noclone)) static int print_csv(uint64_t vlenb) {
     printf("LIBMVEC_CSV,3,%s,%llu,123456789,%s,%u\n",STR(FUNC),(unsigned long long)(vlenb*8),PROFILE_NAME,(unsigned)TIMING_REPEAT);
 #if N16_TRIM
     printf("M,fast,direct1,direct2\n");
+#elif HARNESS_MODES == 8
+    printf("M,strict,fast,auto1,auto2,direct1,direct2,direct4,direct8,rdcycle,empty,copy\n");
 #else
     printf("M,strict,fast,auto1,auto2,direct1,direct2,rdcycle,empty,copy\n");
 #endif
@@ -187,7 +211,7 @@ int main(void) {
             size_t n=lengths_check[c]; if(n>WORK_COUNT) continue;
             prepare_output(n); funcs[m](n,x,z,output.y); verify(m,n);
         }
-        const size_t vl=(vlenb/sizeof(real_t)) * (N16_TRIM?(m==2?2:1):((m==3||m==5)?2:1));
+        const size_t vl=(vlenb/sizeof(real_t))*mode_lmul[m];
         for(size_t n=vl-1;n<=vl+1 && n<=WORK_COUNT;++n) {
             prepare_output(n); funcs[m](n,x,z,output.y); verify(m,n);
         }

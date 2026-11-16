@@ -27,6 +27,11 @@ FUNCTIONS = ('log', 'exp', 'sin', 'cos', 'pow', 'logf', 'expf',
 PHASES = {'first': 1, 'warmup': 2, 'steady': 7}
 ROUNDS = 10
 MODE_HEADER = 'M,strict,fast,auto1,auto2,direct1,direct2,rdcycle,empty,copy'
+# LMUL4/8 extension: two extra direct columns before the three controls.
+MODES_LMUL48 = MODES + ('direct_m4', 'direct_m8')
+MODE_HEADER_LMUL48 = ('M,strict,fast,auto1,auto2,direct1,direct2,direct4,'
+                      'direct8,rdcycle,empty,copy')
+MODE_TABLES = {MODES: MODE_HEADER, MODES_LMUL48: MODE_HEADER_LMUL48}
 COLUMN_HEADER = 'm,hash,' + ','.join(f'b{r},c{r}' for r in range(ROUNDS))
 DECIMAL = re.compile(r'(?:0|[1-9][0-9]*)\Z')
 CSV_HEADER = re.compile(r'\bLIBMVEC_CSV\b')
@@ -52,10 +57,14 @@ def _manifest_int(value, label, minimum=0):
     return value
 
 
-def mode_table(profile):
+def mode_table(profile, expected_modes=None):
+    """Return (modes, controls, header) for the manifest's declared matrix."""
     if profile == 'n16-trim':
         return ('scalar_fast', 'direct_m1', 'direct_m2'), (), 'M,fast,direct1,direct2'
-    return MODES, CALIBRATION_MODES, MODE_HEADER
+    modes = MODES if expected_modes is None else tuple(expected_modes)
+    if modes not in MODE_TABLES:
+        raise ValueError('expected.modes: unsupported mode table')
+    return modes, CALIBRATION_MODES, MODE_TABLES[modes]
 
 
 def _plan(manifest_case, expected):
@@ -72,7 +81,7 @@ def _plan(manifest_case, expected):
         raise ValueError('expected.profile: unsupported profile')
     if profile == 'format-smoke' and function != 'log':
         raise ValueError('format-smoke supports only log')
-    modes, controls, mode_header = mode_table(profile)
+    modes, controls, mode_header = mode_table(profile, expected.get('modes'))
     for key, wanted in (('modes', modes), ('calibration_modes', controls)):
         if not isinstance(expected.get(key), list) or expected[key] != list(wanted):
             raise ValueError(f'expected.{key}: mode table mismatch')
@@ -188,7 +197,7 @@ def expand(text, manifest_case):
         raise ValueError('header vlen_bits must be a power-of-two multiple of 128')
     if _uint(header[4], 'header seed') != 123456789:
         raise ValueError('header seed must be 123456789')
-    modes, controls, mode_header = mode_table(profile)
+    modes, controls, mode_header = mode_table(profile, expected.get('modes'))
     raw, _ = take('M', 1 + len(modes) + len(controls))
     if raw != mode_header:
         raise ValueError('CSV mode header mismatch')
@@ -202,7 +211,7 @@ def expand(text, manifest_case):
         f'timing_repeat={repeat}']
     data_rows = 0
     logical_records = 0
-    modes, controls, mode_header = mode_table(profile)
+    modes, controls, mode_header = mode_table(profile, expected.get('modes'))
     all_modes = modes + controls
     for n in lengths:
         for k in batches:
@@ -298,7 +307,7 @@ def recover(text, manifest_case):
         return result
     name, function, profile, lengths, batches, minimum_checks, repeat = _plan(
         manifest_case, expected)
-    modes, controls, mode_header = mode_table(profile)
+    modes, controls, mode_header = mode_table(profile, expected.get('modes'))
     all_modes = modes + controls
     ansi = re.compile(r'\x1b\[[0-?]*[ -/]*[@-~]')
     pending = None

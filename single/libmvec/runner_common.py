@@ -25,6 +25,11 @@ SCHEMA_VERSION = 1
 SUITE_NAME = 'libmvec-xs'
 MODES = ('scalar_strict', 'scalar_fast', 'auto_m1', 'auto_m2',
          'direct_m1', 'direct_m2')
+# Optional LMUL4/8 extension of the same ordered matrix.  It is appended only
+# when the built archive exports those kernels; both prefixes remain valid
+# manifests so previously measured six-mode runs stay auditable.
+MODES_LMUL48 = MODES + ('direct_m4', 'direct_m8')
+N16_TRIM_MODES = ('scalar_fast', 'direct_m1', 'direct_m2')
 CALIBRATION_MODES = ('rdcycle', 'empty', 'copy')
 ORDER_POLICY = 'rotate-all-9'
 LENGTHS = (16, 128, 1024)
@@ -486,10 +491,17 @@ def expected_plan(entry, suite, name):
         profile = expected.get('profile', 'full')
         if profile not in ('full', 'format-smoke', 'n16', 'n16-trim', 'grid'):
             raise ManifestError(f'{name}: unknown profile {profile!r}')
-        wanted_modes = ('scalar_fast', 'direct_m1', 'direct_m2') if profile == 'n16-trim' else MODES
+        modes = expected.get('modes')
+        if profile == 'n16-trim':
+            wanted_modes = N16_TRIM_MODES
+        elif isinstance(modes, list) and tuple(modes) in (MODES, MODES_LMUL48):
+            wanted_modes = tuple(modes)
+        else:
+            raise ManifestError(
+                f'{name}: expected.modes must be {list(MODES)!r} or '
+                f'{list(MODES_LMUL48)!r}')
         wanted_controls = () if profile == 'n16-trim' else CALIBRATION_MODES
         wanted_policy = 'rotate-all-' + str(len(wanted_modes) + len(wanted_controls))
-        modes = expected.get('modes')
         if not isinstance(modes, list) or modes != list(wanted_modes):
             raise ManifestError(f'{name}: expected.modes must be {list(wanted_modes)!r}')
         if profile == 'format-smoke' and function != 'log':

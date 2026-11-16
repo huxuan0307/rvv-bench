@@ -227,7 +227,8 @@ def normalize_record(record, kind, name, plan, issues):
     n = _int_field(record, 'n', issues, minimum=1)
     k = _int_field(record, 'k', issues, minimum=1)
     round_index = _int_field(record, 'round', issues, minimum=0)
-    order = _int_field(record, 'order', issues, minimum=0, maximum=8)
+    order = _int_field(record, 'order', issues, minimum=0,
+                       maximum=len(plan['modes']) + len(plan['calibration_modes']) - 1)
     parsed.update(n=n, k=k, round=round_index, order=order)
     phase = parsed.get('phase')
     if phase not in common.PHASES:
