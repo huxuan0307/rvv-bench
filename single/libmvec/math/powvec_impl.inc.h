@@ -5,7 +5,8 @@
    Dedicated 128-bin log with a compensated tail, compensated z*log(x),
    then the original 128-bin exp. Explicit FMA placement matches the frozen
    RISC-V scalar build (including contraction of InvLn2N*x + Shift).
-   RNE is required; neither frm nor vxrm is read or written here. */
+   Experimental accuracy tests use RNE; non-RNE accuracy and the final API
+   contract remain open. Neither frm nor vxrm is read or written here. */
 #define OP_(a,t) __riscv_##a##_##t
 #define OP(a,t) OP_(a,t)
 #define FOP(a) OP(a,FT)

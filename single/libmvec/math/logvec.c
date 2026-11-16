@@ -30,7 +30,13 @@
 #define UCMPLT __riscv_vmsltu_vx_u64m1_b64
 #define GATHER __riscv_vluxei64_v_f64m1
 #define CONVERT __riscv_vfcvt_f_x_v_f64m1
+/* Only m1 array may opt into the full inline baseline core.  Defining the
+   option to 0 disables it; LOGVEC_BASELINE already uses that core everywhere. */
+#if defined(LOGVEC_ARRAY_M1_BASELINE) && LOGVEC_ARRAY_M1_BASELINE && !defined(LOGVEC_BASELINE)
+#define LOGVEC_M1_ARRAY_FULL 1
+#endif
 #include "logvec_impl.inc.h"
+#undef LOGVEC_M1_ARRAY_FULL
 #undef ENTRY
 #undef CORE
 #undef NX

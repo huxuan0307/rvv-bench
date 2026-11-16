@@ -22,6 +22,9 @@
 
 #ifdef LOGVEC_BASELINE
 static __attribute__((always_inline)) inline FV CORE(FV a, size_t vl)
+#elif defined(LOGVEC_M1_ARRAY_FULL)
+/* Reuse the baseline body for the m1 array and the Nx cold wrapper. */
+static __attribute__((always_inline)) inline FV CAT2(CORE,_full)(FV a, size_t vl)
 #else
 static __attribute__((noinline,noclone,riscv_vector_cc)) FV CAT2(CORE,_cold)(FV a, size_t vl)
 #endif
@@ -111,6 +114,13 @@ static __attribute__((noinline,noclone,riscv_vector_cc)) FV CAT2(CORE,_cold)(FV 
         }
     return result;
 }
+#ifdef LOGVEC_M1_ARRAY_FULL
+static __attribute__((noinline,noclone,riscv_vector_cc)) FV
+CAT2(CORE,_cold)(FV a, size_t vl)
+{
+    return CAT2(CORE,_full)(a,vl);
+}
+#endif
 #ifndef LOGVEC_BASELINE
 /* Dispatch before floating-point operations so cold lanes retain exact flags. */
 static __attribute__((always_inline)) inline FV CORE(FV a, size_t vl)
@@ -157,7 +167,13 @@ static __attribute__((always_inline)) inline FV CORE(FV a, size_t vl)
     return result;
 }
 #endif
+#ifdef LOGVEC_M1_ARRAY_FULL
+#define LOGVEC_M1_ARRAY_CORE CAT2(CORE,_full)
+#endif
 #include "unary_entries.inc.h"
+#ifdef LOGVEC_M1_ARRAY_FULL
+#undef LOGVEC_M1_ARRAY_CORE
+#endif
 #undef CAT2_
 #undef CAT2
 #undef OP_

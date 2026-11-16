@@ -1,5 +1,7 @@
 /* Experimental scalar-derived RVV math, LGPL-2.1-or-later.
-   RNE is a caller precondition; no entry accesses frm.
+   Experimental accuracy tests are run under RNE; other rounding modes are
+   not yet accuracy-validated. The final API rounding contract is open.
+   These entries do not themselves access frm.
    Array n==0 accepts null pointers. Exact in-place arrays are supported;
    partial overlap is not. Unary entries ignore the third argument.
    Nx entries process the complete VLMAX regardless of incoming vl. */

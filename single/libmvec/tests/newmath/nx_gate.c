@@ -1,7 +1,8 @@
 /* Independent MPFR512 and vector-PCS gate. Compile this translation unit
    without fast-math, autovectorization, or builtin scalar math substitution.
-   The kernels are RNE-only; five-mode tests exercise the outer RNE wrapper,
-   not direct non-RNE mathematical accuracy. */
+   This gate tests mathematical accuracy under RNE; its five-mode tests
+   exercise the outer RNE wrapper, not direct non-RNE mathematical accuracy.
+   It does not establish a final caller rounding-mode contract. */
 #include <stdint.h>
 #include <stddef.h>
 #include <errno.h>
@@ -50,11 +51,21 @@ static real_t value(bits_t b){real_t x;__builtin_memcpy(&x,&b,sizeof x);return x
 static uint64_t ordered(bits_t b){return b&SIGN?(bits_t)~b:b|SIGN;}
 static unsigned flags(void){unsigned x;__asm__ volatile("frflags %0":"=r"(x));return x;}
 static void clearflags(void){__asm__ volatile("fsflags zero":::"memory");}
+static int cold(bits_t b);
 #if BINARY
-real_t CAT(__wrap_,FUNC)(real_t x,real_t y){++scalar_calls;if(forbid_calls)++forbidden_calls;return CAT(__real_,FUNC)(x,y);}
+/* The one VLMAX chunk crossing the 115422 boundary must still reject
+   fallback for each ordinary pair, without changing vector-call grouping. */
+static size_t normal_begin,normal_end;
+real_t CAT(__wrap_,FUNC)(real_t x,real_t y){
+ ++scalar_calls;
+ if(forbid_calls)++forbidden_calls;
+ else for(size_t j=normal_begin;j<normal_end;++j)
+  if(bits(x)==ORACLE_X[j]&&bits(y)==ORACLE_Z[j]){++forbidden_calls;break;}
+ return CAT(__real_,FUNC)(x,y);
+}
 static real_t scalar(real_t x,real_t y){return CAT(__real_,FUNC)(x,y);}
 #else
-real_t CAT(__wrap_,FUNC)(real_t x){++scalar_calls;if(forbid_calls)++forbidden_calls;return CAT(__real_,FUNC)(x);}
+real_t CAT(__wrap_,FUNC)(real_t x){++scalar_calls;if(forbid_calls&&!cold(bits(x)))++forbidden_calls;return CAT(__real_,FUNC)(x);}
 static real_t scalar(real_t x,real_t y){(void)y;return CAT(__real_,FUNC)(x);}
 #endif
 static int cold(bits_t b){
@@ -108,7 +119,7 @@ extern int nx_rne_probe(void);
 int nx_probe_main(void){unsigned rm;__asm__ volatile("frrm %0":"=r"(rm));return rm==0?37:99;}
 int main(void){
  __asm__ volatile("csrr %0,vlenb":"=r"(vlenb));
- if(vlenb>MAX_VLENB||2*vlenb/sizeof(real_t)>MAX_LANES){printf("NX_UNSUPPORTED fn=%s reason=vlen-cap bytes=%u\n",FN_TEXT,(unsigned)vlenb);return 1;}
+ if(vlenb<sizeof(real_t)||vlenb>MAX_VLENB||2*vlenb/sizeof(real_t)>MAX_LANES){printf("NX_UNSUPPORTED fn=%s reason=vlen-cap bytes=%u\n",FN_TEXT,(unsigned)vlenb);return 1;}
  uintptr_t tp;__asm__ volatile("mv %0,tp":"=r"(tp));
  checks+=3;
  if(tp!=(uintptr_t)__tls_base)error("tls-base",0,0,tp,(uintptr_t)__tls_base);
@@ -120,6 +131,7 @@ int main(void){
  for(unsigned m=0;m<2;++m){
   size_t n=(m+1)*vlenb/sizeof(real_t);uint64_t maxulp=0;scalar_calls=forbidden_calls=0;
 #if !ABI_ONLY
+  size_t oracle_seen=0;
   for(size_t p=0;p<ORACLE_COUNT;p+=n){
    for(size_t i=0;i<n;++i){size_t j=p+i;if(j>=ORACLE_COUNT)j=ORACLE_COUNT-1;x[i]=value(ORACLE_X[j]);
 #if BINARY
@@ -130,21 +142,28 @@ int main(void){
    }
 #if BINARY
    forbid_calls=p+n<=115422;
+   normal_begin=normal_end=0;
+   if(p<115422&&p+n>115422){normal_begin=p;normal_end=115422;}
 #else
-   forbid_calls=1;for(size_t i=0;i<n;++i)if(cold(bits(x[i])))forbid_calls=0;
+   forbid_calls=1;
 #endif
    size_t incoming=(p/n)%4;incoming=incoming==0?0:incoming==1?1:incoming==2?n-1:n;
    invoke(m,n,incoming,0);
-   for(size_t i=0;i<n&&p+i<ORACLE_COUNT;++i){bits_t got=bits(out[i+1]),ref=ORACLE_REF[p+i];++checks;if(!same_or_ulp(got,ref,ORACLE_LIMIT))error("mpfr512",m,p+i,got,ref);uint64_t a=ordered(got),b=ordered(ref),d=a>b?a-b:b-a;if(d>maxulp)maxulp=d;}
+   for(size_t i=0;i<n&&p+i<ORACLE_COUNT;++i){bits_t got=bits(out[i+1]),ref=ORACLE_REF[p+i];++checks;++oracle_seen;if(!same_or_ulp(got,ref,ORACLE_LIMIT))error("mpfr512",m,p+i,got,ref);uint64_t a=ordered(got),b=ordered(ref),d=a>b?a-b:b-a;if(d>maxulp)maxulp=d;}
   }
-  forbid_calls=0;++checks;if(forbidden_calls)error("ordinary-scalar-fallback",m,0,forbidden_calls,0);
-  printf("NX_MPFR fn=%s lmul=%u count=%u limit=%u max_ulp_raw=%llu scalar_calls=%llu forbidden_calls=%llu\n",FN_TEXT,m+1,ORACLE_COUNT,ORACLE_LIMIT,(unsigned long long)maxulp,(unsigned long long)scalar_calls,(unsigned long long)forbidden_calls);
+  forbid_calls=0;
+#if BINARY
+  normal_begin=normal_end=0;
+#endif
+  ++checks;if(forbidden_calls)error("ordinary-scalar-fallback",m,0,forbidden_calls,0);
+  ++checks;if(oracle_seen!=ORACLE_COUNT)error("oracle-count",m,0,oracle_seen,ORACLE_COUNT);
+  printf("NX_MPFR fn=%s lmul=%u count=%u limit=%u max_ulp_raw=%llu scalar_calls=%llu forbidden_calls=%llu\n",FN_TEXT,m+1,(unsigned)oracle_seen,ORACLE_LIMIT,(unsigned long long)maxulp,(unsigned long long)scalar_calls,(unsigned long long)forbidden_calls);
 #endif
   /* Broadcast every historical semantic case, then rotate mixed cases across
      lanes. All four incoming vl values are tested at VLMAX, including zero. */
-  size_t ns=sizeof semantic/sizeof *semantic;
+  size_t ns=sizeof semantic/sizeof *semantic, semantic_calls=0;
   for(unsigned mixed=0;mixed<2;++mixed)for(size_t s=0;s<ns;++s)for(unsigned iv=0;iv<4;++iv){
-   clearflags();errno=0;
+   ++semantic_calls;clearflags();errno=0;
    for(size_t i=0;i<n;++i){size_t j=mixed?(s+i)%ns:s;x[i]=value(semantic[j][0]);z[i]=value(semantic[j][1]);want[i]=bits(scalar(x[i],z[i]));}
    unsigned rf=flags();int re=errno;
 #if ABI_ONLY
@@ -164,7 +183,8 @@ int main(void){
   /* Sticky flags/errno on a normal call must survive; no clearing in wrapper. */
   for(size_t i=0;i<n;++i){x[i]=(real_t)0.75;z[i]=(real_t)2;}
   errno=89;__asm__ volatile("fsflags %0"::"r"(24):"memory");invoke(m,n,1,1);checks+=2;if((flags()&24)!=24)error("sticky-fflags",m,0,flags(),24);if(errno!=89)error("sticky-errno",m,0,errno,89);
-  printf("NX_ABI fn=%s lmul=%u incoming_vl=0,1,vlmax-1,vlmax semantics=%u mixed=1 preserved=v1-v7,v24-v31 normal=1 cold=1 caller_strict=1\n",FN_TEXT,m+1,(unsigned)ns);
+  ++checks;if(semantic_calls!=ns*8)error("semantic-count",m,0,semantic_calls,ns*8);
+  printf("NX_ABI fn=%s lmul=%u incoming_vl=0,1,vlmax-1,vlmax semantics=%u calls=%u mixed=1 preserved=v1-v7,v24-v31 normal=1 cold=1 caller_strict=1\n",FN_TEXT,m+1,(unsigned)ns,(unsigned)semantic_calls);
  }
  for(unsigned rm=0;rm<5;++rm){__asm__ volatile("fsrm %0"::"r"(rm):"memory");int r=nx_rne_probe();unsigned after;__asm__ volatile("frrm %0":"=r"(after));checks+=2;if(r!=37)error("entry-rne",0,rm,r,37);if(after!=rm)error("entry-frm-restore",0,rm,after,rm);}
  __asm__ volatile("fsrmi 0":::"memory");

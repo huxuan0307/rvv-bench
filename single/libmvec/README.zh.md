@@ -1,5 +1,7 @@
 # libmvec 香山裸机基准
 
+> 2026-11-14 适用入口与安全目录规则见 [七函数精简构建运行说明](SEVENMATH.zh.md)。本文下方部分历史示例依赖已删除脚本或在 build 下运行，不能照抄；以新说明为准。
+
 测试配套 GCC/glibc 的**公开 RVV libmvec**，不是原始 veclibm 的重命名。复用本仓 AM、TLS、klib 和 errno 支持，直接链接发布安装的静态数学库，产出从 `0x80000000` 启动的裸机 ELF/BIN。**NEMU 只验证功能；性能来自非 static gsim 的香山 RTL 中目标程序读取的 rdcycle。**
 
 所有示例从本仓根目录运行，使用 Python 3.10+、宿主 MPFR 共享库和支持libmvec的RISC-V工具链。构建/运行输出目录应每次新建；构建产物、原始日志和`.dsh`任务数据不提交Git。迁移与Git更新说明见[运行环境说明](<../../docs/RUNTIME.zh.md>)。

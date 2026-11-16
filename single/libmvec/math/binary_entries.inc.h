@@ -1,5 +1,5 @@
 /* Shared binary register core shells. Exact array y==x or y==z is safe. */
-__attribute__((noinline,noclone))
+__attribute__((noinline,noclone,aligned(64)))
 void ENTRY(size_t n, const double *x, const double *z, double *y)
 {
     for (size_t pos=0; pos<n;) {

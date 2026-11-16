@@ -1,7 +1,7 @@
 /* RVV adaptation of IBM AML, GNU libc s_sin.c, usncs.h, sincostab.c.
    Copyright (C) 2001-2026 Free Software Foundation, Inc.
    SPDX-License-Identifier: LGPL-2.1-or-later
-   RNE-only kernels: the outer benchmark entry owns the rounding guard. */
+   Historical precision testing used RNE; the final rounding contract is open. */
 #include <math.h>
 #include <stdint.h>
 #include <riscv_vector.h>

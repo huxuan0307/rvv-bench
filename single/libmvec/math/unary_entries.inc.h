@@ -1,13 +1,17 @@
 /* Shared register core shells; no array bridge occurs on the Nx hot path.
    Native RVV arguments/return use the vector PCS. Nx always processes VLMAX. */
-__attribute__((noinline,noclone))
+__attribute__((noinline,noclone,aligned(64)))
 void ENTRY(size_t n, const REAL_TYPE *x, const REAL_TYPE *unused, REAL_TYPE *y)
 {
     (void)unused;
     for (size_t pos=0; pos<n;) {
         size_t vl=SETVL(n-pos);
         FV input=ENTRY_LOAD(x+pos,vl);
+#ifdef LOGVEC_M1_ARRAY_CORE
+        FV output=LOGVEC_M1_ARRAY_CORE(input,vl);
+#else
         FV output=CORE(input,vl);
+#endif
         ENTRY_STORE(y+pos,output,vl);
         pos+=vl;
     }
@@ -16,5 +20,10 @@ __attribute__((noinline,noclone,riscv_vector_cc))
 FV NX(FV input)
 {
     size_t vl=SETVLMAX();
+#ifdef SIXMATH_EXPF_HOT_LIFETIME
+    /* Keep the vector-PCS input in place: without this barrier GCC copies it
+       with vmv2r.v and emits vsetivli vl=0, which flushes the RTL pipeline. */
+    __asm__ volatile("" : "+vr"(input));
+#endif
     return CORE(input,vl);
 }

@@ -1,5 +1,6 @@
 /* RVV adaptation of glibc dbl-64/e_exp.c, Copyright (C) 2018-2026 FSF.
-   SPDX-License-Identifier: LGPL-2.1-or-later. RNE-only array entry. */
+   SPDX-License-Identifier: LGPL-2.1-or-later.
+   Historical precision testing used RNE; the final rounding contract is open. */
 #define VOP_(a,t) __riscv_##a##_##t
 #define VOP(a,t) VOP_(a,t)
 #define F(a) VOP(a,FT)

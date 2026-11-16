@@ -3,7 +3,8 @@
    SPDX-License-Identifier: LGPL-2.1-or-later
 
    RVV array adaptation: original IBM table and split range reduction.
-   RNE is a precondition, established once by the outer entry wrapper.
+   Experimental accuracy tests use RNE; non-RNE accuracy and the final
+   API rounding contract remain open. The benchmark wrapper sets RNE once.
    No operation in reduce_sincos below is contracted: its compensation
    requires the same individual roundings as the scalar algorithm.
    Only local Taylor polynomials use explicit vector fused operations.
@@ -30,6 +31,7 @@
 
 #define TV_CAT_(a,b) a##b
 #define TV_CAT(a,b) TV_CAT_(a,b)
+#define TV_RNECORE TV_CAT(CORE,_rne)
 #if (defined(SIXMATH_COLD_DISPATCH) && SIXMATH_COLD_DISPATCH) || \
     (defined(SIXMATH_TRIG_UNIFORM) && SIXMATH_TRIG_UNIFORM)
 static __attribute__((noinline,noclone,riscv_vector_cc)) FV TV_CAT(CORE,_cold)(FV original, size_t vl)
@@ -161,7 +163,7 @@ static __attribute__((noinline,noclone,riscv_vector_cc)) FV TV_CAT(CORE,_cold)(F
         }
     return result;
 }
-static __attribute__((always_inline)) inline FV CORE(FV original, size_t vl)
+static __attribute__((always_inline)) inline FV TV_RNECORE(FV original, size_t vl)
 {
 #if TRIG_COS && defined(SIXMATH_HOT_LIFETIME) && SIXMATH_HOT_LIFETIME
         __asm__ volatile("" : "+vr"(original));
@@ -299,7 +301,7 @@ static __attribute__((always_inline)) inline FV CORE(FV original, size_t vl)
     return result;
 }
 #else
-static __attribute__((always_inline)) inline FV CORE(FV original, size_t vl)
+static __attribute__((always_inline)) inline FV TV_RNECORE(FV original, size_t vl)
 {
         UV ub=REINTERPRET_FU(original);
         UV ab=UOP(vand_vx)(ub,UINT64_C(0x7fffffffffffffff),vl);
@@ -429,6 +431,20 @@ static __attribute__((always_inline)) inline FV CORE(FV original, size_t vl)
     return result;
 }
 #endif
+/* Both magic-constant rounding steps and compensation require RNE.  Change
+   only frm, not fflags, and restore the caller's mode after all arithmetic. */
+static __attribute__((always_inline)) inline FV CORE(FV original, size_t vl)
+{
+        unsigned long oldfrm;
+        __asm__ volatile ("frrm %0" : "=r" (oldfrm) : : "memory");
+        if (__builtin_expect(oldfrm != 0, 0))
+            __asm__ volatile ("fsrmi 0" : : : "memory");
+        FV result = TV_RNECORE(original, vl);
+        if (__builtin_expect(oldfrm != 0, 0))
+            __asm__ volatile ("fsrm %0" : : "r" (oldfrm) : "memory");
+        return result;
+}
+#undef TV_RNECORE
 #undef TV_CAT
 #undef TV_CAT_
 #include "unary_entries.inc.h"

@@ -85,7 +85,7 @@ int main(void){
     if(bits(exp_after_errno)!=bits(exp_ref))error("errno-exp-table",0,0,bits(exp_after_errno),bits(exp_ref));
     if(errno!=ERANGE)error("errno-normal-preserve",0,0,errno,ERANGE);
     for(unsigned m=0;m<2;++m){
-        uint64_t maxulp=0,nonzero=0;scalar_calls=forbidden_scalar_calls=0;
+        uint64_t maxulp=0,nonzero=0;size_t oracle_seen=0;scalar_calls=forbidden_scalar_calls=0;
         /* Split exactly at the normal-domain group boundary for wrapping. */
         for(size_t p=0;p<POWVEC_UNIT_COUNT;){
             size_t n=POWVEC_UNIT_COUNT-p;if(n>CHUNK)n=CHUNK;
@@ -97,7 +97,7 @@ int main(void){
             for(size_t i=0;i<n;++i){
                 uint64_t a=bits(y[i+1]),b=powvec_unit_reference[p+i];
                 uint64_t aa=a&UINT64_C(0x7fffffffffffffff),bb=b&UINT64_C(0x7fffffffffffffff);
-                ++checks;
+                ++checks;++oracle_seen;
                 if(bb>UINT64_C(0x7ff0000000000000)){
                     if(aa<=UINT64_C(0x7ff0000000000000))error("mpfr-nan",m,p+i,a,b);
                 }else if(bb==0 || bb==UINT64_C(0x7ff0000000000000)){
@@ -114,7 +114,8 @@ int main(void){
         }
         calls_forbidden=0;
         ++checks;if(forbidden_scalar_calls)error("normal-scalar-fallback",m,0,forbidden_scalar_calls,0);
-        printf("POWVEC_MPFR mode=m%u count=%u max_ulp=%llu nonzero_ulp=%llu limit=%u scalar_fallback=%llu normal_fallback=%llu\n",m+1,POWVEC_UNIT_COUNT,(unsigned long long)maxulp,(unsigned long long)nonzero,POWVEC_UNIT_ULP_LIMIT,(unsigned long long)scalar_calls,(unsigned long long)forbidden_scalar_calls);
+        ++checks;if(oracle_seen!=POWVEC_UNIT_COUNT)error("oracle-count",m,0,oracle_seen,POWVEC_UNIT_COUNT);
+        printf("POWVEC_MPFR mode=m%u count=%u max_ulp=%llu nonzero_ulp=%llu limit=%u scalar_fallback=%llu normal_fallback=%llu\n",m+1,(unsigned)oracle_seen,(unsigned long long)maxulp,(unsigned long long)nonzero,POWVEC_UNIT_ULP_LIMIT,(unsigned long long)scalar_calls,(unsigned long long)forbidden_scalar_calls);
         unsigned ns=sizeof sem/sizeof *sem;
         for(unsigned s=0;s<ns;++s){
             double a=val(sem[s][0]),b=val(sem[s][1]);clearflags();errno=0;

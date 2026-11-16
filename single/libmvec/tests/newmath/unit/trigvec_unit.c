@@ -59,7 +59,7 @@ int main(void){
   /* A nonzero errno store must not corrupt any ordinary scalar/GOT access. */
   errno=34;double probe=scalar[f](0.75);++checks;if(errno!=34||fabs(probe-(f?0.7316888688738209:0.6816387600233341))>0x1p-51)error("errno-before-scalar",f,m,0,bits(probe),34);
   errno=73;double probe_in=0.75,probe_out=0;fn[f][m](1,&probe_in,0,&probe_out);++checks;if(errno!=73||fabs(probe_out-probe)>0x1p-51)error("errno-before-vector",f,m,0,bits(probe_out),73);
-  uint64_t maxulp=0,nonzero=0;fallback[f]=ordinary[f]=0;
+  uint64_t maxulp=0,nonzero=0;size_t oracle_seen=0;fallback[f]=ordinary[f]=0;
   for(size_t pos=0;pos<TRIG_UNIT_COUNT;pos+=CHUNK){
    size_t n=TRIG_UNIT_COUNT-pos;if(n>CHUNK)n=CHUNK;
    for(size_t i=0;i<n;++i)x[i]=val(trig_unit_input[pos+i]);
@@ -67,13 +67,14 @@ int main(void){
    fn[f][m](n,x,0,y+1);
    for(size_t i=0;i<n;++i){
     uint64_t a=ordered(bits(y[i+1])),b=ordered(reference[f][pos+i]),d=a>b?a-b:b-a;
-    ++checks;if(d>maxulp)maxulp=d;if(d)++nonzero;
+    ++checks;++oracle_seen;if(d>maxulp)maxulp=d;if(d)++nonzero;
     if(d>TRIG_UNIT_ULP_LIMIT)error("mpfr",f,m,pos+i,bits(y[i+1]),reference[f][pos+i]);
    }
    ++checks;if(bits(y[0])!=GUARD||bits(y[n+1])!=GUARD)error("canary",f,m,pos,bits(y[n+1]),GUARD);
   }
   ++checks;if(ordinary[f])error("ordinary-fallback",f,m,0,ordinary[f],0);
-  printf("TRIG_MPFR function=%u mode=m%u count=%u max_ulp=%llu nonzero_ulp=%llu limit=%u fallback=%llu ordinary_fallback=%llu\n",f,m+1,TRIG_UNIT_COUNT,(unsigned long long)maxulp,(unsigned long long)nonzero,TRIG_UNIT_ULP_LIMIT,(unsigned long long)fallback[f],(unsigned long long)ordinary[f]);
+  ++checks;if(oracle_seen!=TRIG_UNIT_COUNT)error("oracle-count",f,m,0,oracle_seen,TRIG_UNIT_COUNT);
+  printf("TRIG_MPFR function=%u mode=m%u count=%u max_ulp=%llu nonzero_ulp=%llu limit=%u fallback=%llu ordinary_fallback=%llu\n",f,m+1,(unsigned)oracle_seen,(unsigned long long)maxulp,(unsigned long long)nonzero,TRIG_UNIT_ULP_LIMIT,(unsigned long long)fallback[f],(unsigned long long)ordinary[f]);
   const unsigned ns=sizeof special/sizeof *special;
   uint64_t want[sizeof special/sizeof *special];
   for(unsigned s=0;s<ns;++s){

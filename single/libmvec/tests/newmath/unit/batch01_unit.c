@@ -67,19 +67,20 @@ int main(void){
  if(bits(sr)!=bits(sr2))error("tls-got-roundtrip",0,0,bits(sr2),bits(sr));
  if(errno!=34)error("tls-errno-roundtrip",0,0,errno,34);
  for(unsigned m=0;m<2;++m){
-  fallback=unexpected=0;uint64_t expectedfb=0,maxulp=0,nonzero=0;unsigned li=0;
+  fallback=unexpected=0;uint64_t expectedfb=0,maxulp=0,nonzero=0;unsigned li=0;size_t oracle_seen=0;
   fn[m](0,0,0,0);
   for(size_t p=0;p<UNIT_COUNT;){size_t n=lengths[li++%(sizeof lengths/sizeof *lengths)];if(n>UNIT_COUNT-p)n=UNIT_COUNT-p;
    for(size_t i=0;i<n;++i){x[i]=value(unit_input[p+i]);if(cold(unit_input[p+i]))++expectedfb;}
    for(size_t i=0;i<CHUNK+3;++i)y[i]=value(GUARD);
    fn[m](n,x,0,y+1);
-   for(size_t i=0;i<n;++i){uint64_t a=ordered(bits(y[i+1])),b=ordered(unit_reference[p+i]),d=a>b?a-b:b-a;++checks;
+   for(size_t i=0;i<n;++i){uint64_t a=ordered(bits(y[i+1])),b=ordered(unit_reference[p+i]),d=a>b?a-b:b-a;++checks;++oracle_seen;
     if(d>maxulp)maxulp=d;if(d)++nonzero;if(d>UNIT_LIMIT)error("mpfr",m,p+i,bits(y[i+1]),unit_reference[p+i]);}
    for(size_t i=0;i<CHUNK+3;++i)if(i==0||i>n){++checks;if(bits(y[i])!=GUARD)error("canary",m,p+i,bits(y[i]),GUARD);}
    p+=n;
   }
   checks+=2;if(unexpected)error("hot-scalar-fallback",m,0,unexpected,0);if(fallback!=expectedfb)error("fallback-count",m,0,fallback,expectedfb);
-  printf("UNIT_MPFR fn=%s mode=m%u count=%u max_ulp=%llu nonzero=%llu limit=%u fallback=%llu expected_fallback=%llu hot_fallback=%llu\n",STR(FUNC),m+1,UNIT_COUNT,(unsigned long long)maxulp,(unsigned long long)nonzero,UNIT_LIMIT,(unsigned long long)fallback,(unsigned long long)expectedfb,(unsigned long long)unexpected);
+  ++checks;if(oracle_seen!=UNIT_COUNT)error("oracle-count",m,0,oracle_seen,UNIT_COUNT);
+  printf("UNIT_MPFR fn=%s mode=m%u count=%u max_ulp=%llu nonzero=%llu limit=%u fallback=%llu expected_fallback=%llu hot_fallback=%llu\n",STR(FUNC),m+1,(unsigned)oracle_seen,(unsigned long long)maxulp,(unsigned long long)nonzero,UNIT_LIMIT,(unsigned long long)fallback,(unsigned long long)expectedfb,(unsigned long long)unexpected);
   unsigned ns=sizeof special/sizeof *special;bits_t want[sizeof special/sizeof *special];
   for(unsigned s=0;s<ns;++s){real_t in=value(special[s]);clearflags();errno=0;real_t ref=CAT(__real_,FUNC)(in);unsigned rf=flags();int re=errno;
    clearflags();errno=0;real_t out=0;fn[m](1,&in,0,&out);unsigned vf=flags();int ve=errno;checks+=3;

@@ -10,6 +10,15 @@
 #ifndef N16_TRIM
 #define N16_TRIM 0
 #endif
+/* Measurement repeats per rdcycle interval. Each repeat runs the whole K-call
+   kernel, so one interval covers TIMING_REPEAT rounds; reporting divides by it.
+   R is not a workload dimension and must stay identical across compared runs. */
+#ifndef TIMING_REPEAT
+#define TIMING_REPEAT 1
+#endif
+#if TIMING_REPEAT < 1 || TIMING_REPEAT > 64
+#error "TIMING_REPEAT must be in [1, 64]"
+#endif
 #if N16_TRIM
 #define MODES 3
 #define CONTROLS 0
@@ -30,6 +39,9 @@
 #elif FORMAT_SMOKE
 #define WORK_COUNT 32
 #define PROFILE_NAME "format-smoke"
+#elif defined(GRID_LENGTHS)
+#define WORK_COUNT DATA_COUNT
+#define PROFILE_NAME "grid"
 #else
 #define WORK_COUNT DATA_COUNT
 #if N16_ONLY
@@ -39,6 +51,9 @@
 #endif
 #endif
 _Static_assert(WORK_COUNT<=DATA_COUNT, "input corpus too short");
+#if defined(GRID_LENGTHS) && (FORMAT_SMOKE || N16_TRIM)
+#error Custom grids require the full nine-mode harness and full input corpus
+#endif
 static real_t x[WORK_COUNT] __attribute__((aligned(64)));
 static real_t z[WORK_COUNT] __attribute__((aligned(64)));
 #define GUARD_ELEMENTS (64/sizeof(real_t))
@@ -109,7 +124,8 @@ static void record_sample(unsigned mode,unsigned n,unsigned k,unsigned iteration
         kernel_fn fn=mode<MODES?funcs[mode]:(mode==7?empty_kernel:copy_kernel);
 #endif
         begin=cycle();
-        for(unsigned j=0;j<k;++j) fn(n,x,z,output.y);
+        for(unsigned rr=0;rr<TIMING_REPEAT;++rr)
+            for(unsigned j=0;j<k;++j) fn(n,x,z,output.y);
         end=cycle();
     }
     struct record *r=&records[record_count++];
@@ -134,7 +150,7 @@ __attribute__((noinline,noclone)) static int print_csv(uint64_t vlenb) {
             }
         }
     if(failed) return 1;
-    printf("LIBMVEC_CSV,2,%s,%llu,123456789,%s\n",STR(FUNC),(unsigned long long)(vlenb*8),PROFILE_NAME);
+    printf("LIBMVEC_CSV,3,%s,%llu,123456789,%s,%u\n",STR(FUNC),(unsigned long long)(vlenb*8),PROFILE_NAME,(unsigned)TIMING_REPEAT);
 #if N16_TRIM
     printf("M,fast,direct1,direct2\n");
 #else
@@ -177,6 +193,11 @@ int main(void) {
         }
     }
     if(failed) return 1;
+#ifdef GRID_LENGTHS
+    /* The build driver validates both lists (at most three entries each). */
+    const unsigned lengths[]={GRID_LENGTHS};
+    const unsigned batches[]={GRID_BATCHES};
+#else
 #if FORMAT_SMOKE
     const unsigned lengths[]={16};
     const unsigned batches[]={1};
@@ -190,6 +211,7 @@ int main(void) {
     const unsigned batches[]={1,4,16};
 #else
     const unsigned batches[]={1,4};
+#endif
 #endif
 #endif
     for(unsigned ni=0;ni<sizeof lengths/sizeof *lengths;++ni)

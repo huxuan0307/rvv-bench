@@ -2,7 +2,8 @@
 #ifndef LOGVEC_H
 #define LOGVEC_H
 #include <stddef.h>
-/* RNE-only array entries. Caller must keep frm == 0 for the complete call.
+/* Array entries. Historical precision testing used RNE; behavior in other
+   rounding modes and the final API contract require separate evaluation.
    Arrays may be identical (in-place), but may not partially overlap.
    Only nonpositive, nonfinite and positive-subnormal lanes call scalar log.
    Ordinary lanes, including near-one and short tails, always use RVV. */
