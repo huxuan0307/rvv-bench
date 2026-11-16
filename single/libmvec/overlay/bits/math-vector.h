@@ -8,7 +8,16 @@
 # if !defined(__riscv_simd_math_abi_v1) || __riscv_simd_math_abi_v1 != 1
 #  error "Compiler lacks required RISC-V vector math ABI handshake"
 # endif
-# define RVV_BENCH_NX_ONLY __attribute__((__simd__("notinbranch"), __riscv_simd_math_abi_v1__(0x22), const))
+/* ABI variant mask.  A compiler that knows __riscv_simd_math_abi_v1_lmul8
+   understands the full 16-bit mask (m1/m2/m4/m8, fixed and scalable); older
+   compilers reject any value above 255 instead of ignoring the high bits, so
+   they get the historical 8-bit m1/m2 scalable-N mask. */
+# ifdef __riscv_simd_math_abi_v1_lmul8
+#  define RVV_BENCH_ABI_MASK 0xffffu
+# else
+#  define RVV_BENCH_ABI_MASK 0x22u
+# endif
+# define RVV_BENCH_NX_ONLY __attribute__((__simd__("notinbranch"), __riscv_simd_math_abi_v1__(RVV_BENCH_ABI_MASK), const))
 # undef __DECL_SIMD_log
 # undef __DECL_SIMD_exp
 # undef __DECL_SIMD_sin

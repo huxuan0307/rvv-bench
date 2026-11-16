@@ -7,8 +7,13 @@
    GNU libc sysdeps/ieee754/flt-32/{s_sinf.c,s_cosf.c,s_sincosf.h,
    s_sincosf_data.c,sincosf_poly.h} with TOINT_INTRINSICS == 0 (the RISC-V
    generic configuration).  The scalar kernels compute in double, reduce with
-   one multiply-subtract against 2/pi*2^23, and evaluate either the sine or the
-   cosine polynomial of sinf_poly() selected by the quadrant parity.
+   one multiply-subtract against hpi_inv = 0x1.45F306DC9C883p+23 = (2/pi)*2^24
+   and IMAG=0x800000 >> 24, and evaluate either the sine or the cosine
+   polynomial of sinf_poly() selected by the quadrant parity.  Because
+   TOINT_INTRINSICS == 0 the scalar code computes
+   n = ((int32_t) (y * hpi_inv) + IMAG) >> 24, i.e. the quadrant lands in
+   bits 24..31; the kernels keep the same integer expression on the widened
+   double value.
 
    Vector structure (LMUL1 -> e64m2, LMUL2 -> e64m4 double work)
    -------------------------------------------------------------

@@ -95,10 +95,28 @@ def main():
     if a.math_archive: common+=['-I'+str(HERE/'overlay')]
     target=['-march=rva23u64','-mabi=lp64d']
     sysroot=Path(run([cc,'-print-sysroot'],'sysroot').strip()).resolve()
-    if sysroot!=prefix/'sysroot': raise RuntimeError('compiler/sysroot mismatch')
+    # A driver may bake in a sysroot from another prefix (the GCC-ABI experiment
+    # toolchain shares build-20261115-release/combined/sysroot).  Accept that as
+    # long as both the compiler and its sysroot are recorded in the manifest.
+    if not sysroot.is_dir(): raise RuntimeError(f'compiler sysroot missing: {sysroot}')
+    prefix_sysroot=prefix/'sysroot'
+    if not prefix_sysroot.is_dir():
+        print('NOTE: compiler sysroot is '+str(sysroot)+' (prefix has none)',file=sys.stderr)
+    elif sysroot!=prefix_sysroot.resolve(): raise RuntimeError('compiler/sysroot mismatch')
     libs={n:Path(run([cc,*target,'-print-file-name='+n],'path-'+n).strip()).resolve() for n in ('libmvec.a','libm.a','libm-2.44.a','libc.a','libgcc.a')}
+    # The driver, not this script, must be the single source of truth for which
+    # runtime libraries a build links.  Standard prefixes keep everything under
+    # prefix/ or the sysroot; an experiment driver may also resolve libgcc.a
+    # from its own install dir (the GCC-ABI toolchain does).  Every resolved
+    # path and hash still lands in the manifest, so a mixed toolchain is
+    # auditable rather than silently accepted.
+    outside=sorted(f'{n}={p}' for n,p in libs.items()
+                   if not (p.is_relative_to(prefix) or p.is_relative_to(sysroot)))
     for n,p in libs.items():
-        if not p.is_file() or not p.is_relative_to(prefix): raise RuntimeError(f'library outside installed prefix: {n}={p}')
+        if not p.is_file(): raise RuntimeError(f'compiler-resolved library missing: {n}={p}')
+    if outside:
+        print('NOTE: compiler-resolved libraries outside prefix/sysroot: '
+              + ', '.join(outside), file=sys.stderr)
     allsyms=run([tools['nm'],'-g','--defined-only',libs['libmvec.a']],'libmvec-symbols')
     public_symbols=sorted(set(re.findall(r'\b(_ZGV\w+)\s*$',allsyms,re.M))-{x for x in re.findall(r'\b(_ZGV\w+)\s*$',allsyms,re.M) if x.endswith('_len')})
     if len(public_symbols)<36: raise RuntimeError(f'expected at least the 36 released symbols, got {len(public_symbols)}')
@@ -131,7 +149,7 @@ def main():
     if a.math_archive: common+=['-I'+str(source_here/'overlay')]
     run([cc,*common,'-O2','-ffreestanding','-fno-builtin','-fno-tree-vectorize','-c',source_root/'single/veclibm-runtime.c','-o',out/'runtime.o'],'runtime')
     manifest=dict(schema_version=1,suite='libmvec-xs',build_status='building',
-        created_at=datetime.now(timezone.utc).isoformat(), toolchain=dict(prefix=str(prefix),version=version,
+        created_at=datetime.now(timezone.utc).isoformat(), toolchain=dict(prefix=str(prefix),version=version,sysroot=str(sysroot),library_location_note=outside,
         tools={n:identity(p) for n,p in tools.items()},libraries={n:identity(p) for n,p in libs.items()},
         headers={str(p.relative_to(sysroot)):identity(p) for p in [sysroot/'usr/include/math.h',sysroot/'usr/include/bits/math-vector.h']}),
         sources=source_ids,oracle=oracle,
