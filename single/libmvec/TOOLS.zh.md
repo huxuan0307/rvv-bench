@@ -7,8 +7,8 @@
 | 目的 | 入口 | 输入 | 输出与限制 |
 |---|---|---|---|
 | 构建七函数新算法库 | [math/build.py](math/build.py) | [math/](math/) 下源码，默认已验证 GCC 前缀 | math/build/libnewmath.a、对象、反汇编、属性、manifest；目标 rva23u64，目前无 LTO |
-| 检查新库数值、特殊值及 Nx ABI | [tests/newmath/gate.py](tests/newmath/gate.py) | --new-archive、--gcc、--scalar-libm、--oracle-dir；实际运行另需 --nemu | --output 新目录中的 ELF/BIN、日志与 gate-results.json；--build-only 只构建。输出不能放 tasks |
-| 审核已有正确性门禁产物 | [tests/newmath/audit_receipts.py](tests/newmath/audit_receipts.py) | 可重复 --gate-dir，--output | 产物身份与通过标志审计；不运行目标程序 |
+| 检查新库数值、特殊值及 Nx ABI | [tests/newmath/gate.py](tests/newmath/gate.py) | prepare：--oracle-dir、--headers-dir；run：--new-archive、--gcc、--scalar-libm、--headers-dir、--build-dir、--run-dir，实际运行另需 --nemu | 当前参数以 --help 为准；--build-only 不等于验证通过；运行目录须带日期时间且不得在 build 路径下 |
+| 管理独立审批、版本失效、数据与报告门禁 | [workflow/README.md](workflow/README.md)、[workflow/cli.py](workflow/cli.py) | 显式 --task；规范 CSV、逐项审阅和永久证据 | init/freeze/artifact/check/record-review/advance/status/report/import-data；不启动仿真。旧 audit_receipts.py 入口在当前仓库不存在，不能宣称已执行 |
 | 合并原始测量生成周期汇总 | [analysis_newmath/cycles_summary.py](analysis_newmath/cycles_summary.py) | --input 四组来源的合并原始 CSV | --output 新 CSV；192行、10列、steady7 中位数；不输出加速比，不覆盖已有文件 |
 | 对旧七函数批次做严格证据分析 | [analysis_newmath/analyze.py](analysis_newmath/analyze.py) | manifest位置参数，--input-root | --output 新目录；限定原 campaign/schema，不是任意批次通用分析器 |
 | 构建已安装 libmvec 的基准 | [build.py](build.py) | --prefix、--case、--profile、--output；可选--math-archive/--external-sysroot/--binutils-prefix | 冻结测试源码、oracle、ELF/BIN及manifest；不是三库统一构建脚本的直接替代 |
