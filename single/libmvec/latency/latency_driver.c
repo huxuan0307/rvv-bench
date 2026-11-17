@@ -159,6 +159,42 @@ extern vfloat64m2_t _ZGV2N4v_exp (vfloat64m2_t) LAT_RVV_CC;
 extern vfloat64m2_t _ZGV2Nxv_exp (vfloat64m2_t) LAT_RVV_CC;
 extern vfloat64m2_t _ZGV2M4v_exp (vbool32_t, vfloat64m2_t) LAT_RVV_CC;
 extern vfloat64m2_t _ZGV2Mxv_exp (vbool32_t, vfloat64m2_t) LAT_RVV_CC;
+/* log family: 8 ABI variants. */
+extern vfloat64m1_t _ZGV1N2v_log (vfloat64m1_t) LAT_RVV_CC;
+extern vfloat64m1_t _ZGV1Nxv_log (vfloat64m1_t) LAT_RVV_CC;
+extern vfloat64m1_t _ZGV1M2v_log (vbool64_t, vfloat64m1_t) LAT_RVV_CC;
+extern vfloat64m1_t _ZGV1Mxv_log (vbool64_t, vfloat64m1_t) LAT_RVV_CC;
+extern vfloat64m2_t _ZGV2N4v_log (vfloat64m2_t) LAT_RVV_CC;
+extern vfloat64m2_t _ZGV2Nxv_log (vfloat64m2_t) LAT_RVV_CC;
+extern vfloat64m2_t _ZGV2M4v_log (vbool32_t, vfloat64m2_t) LAT_RVV_CC;
+extern vfloat64m2_t _ZGV2Mxv_log (vbool32_t, vfloat64m2_t) LAT_RVV_CC;
+/* sin family: 8 ABI variants. */
+extern vfloat64m1_t _ZGV1N2v_sin (vfloat64m1_t) LAT_RVV_CC;
+extern vfloat64m1_t _ZGV1Nxv_sin (vfloat64m1_t) LAT_RVV_CC;
+extern vfloat64m1_t _ZGV1M2v_sin (vbool64_t, vfloat64m1_t) LAT_RVV_CC;
+extern vfloat64m1_t _ZGV1Mxv_sin (vbool64_t, vfloat64m1_t) LAT_RVV_CC;
+extern vfloat64m2_t _ZGV2N4v_sin (vfloat64m2_t) LAT_RVV_CC;
+extern vfloat64m2_t _ZGV2Nxv_sin (vfloat64m2_t) LAT_RVV_CC;
+extern vfloat64m2_t _ZGV2M4v_sin (vbool32_t, vfloat64m2_t) LAT_RVV_CC;
+extern vfloat64m2_t _ZGV2Mxv_sin (vbool32_t, vfloat64m2_t) LAT_RVV_CC;
+/* cos family: 8 ABI variants. */
+extern vfloat64m1_t _ZGV1N2v_cos (vfloat64m1_t) LAT_RVV_CC;
+extern vfloat64m1_t _ZGV1Nxv_cos (vfloat64m1_t) LAT_RVV_CC;
+extern vfloat64m1_t _ZGV1M2v_cos (vbool64_t, vfloat64m1_t) LAT_RVV_CC;
+extern vfloat64m1_t _ZGV1Mxv_cos (vbool64_t, vfloat64m1_t) LAT_RVV_CC;
+extern vfloat64m2_t _ZGV2N4v_cos (vfloat64m2_t) LAT_RVV_CC;
+extern vfloat64m2_t _ZGV2Nxv_cos (vfloat64m2_t) LAT_RVV_CC;
+extern vfloat64m2_t _ZGV2M4v_cos (vbool32_t, vfloat64m2_t) LAT_RVV_CC;
+extern vfloat64m2_t _ZGV2Mxv_cos (vbool32_t, vfloat64m2_t) LAT_RVV_CC;
+/* pow family: binary, 8 ABI variants (two vector arguments). */
+extern vfloat64m1_t _ZGV1N2vv_pow (vfloat64m1_t, vfloat64m1_t) LAT_RVV_CC;
+extern vfloat64m1_t _ZGV1Nxvv_pow (vfloat64m1_t, vfloat64m1_t) LAT_RVV_CC;
+extern vfloat64m1_t _ZGV1M2vv_pow (vbool64_t, vfloat64m1_t, vfloat64m1_t) LAT_RVV_CC;
+extern vfloat64m1_t _ZGV1Mxvv_pow (vbool64_t, vfloat64m1_t, vfloat64m1_t) LAT_RVV_CC;
+extern vfloat64m2_t _ZGV2N4vv_pow (vfloat64m2_t, vfloat64m2_t) LAT_RVV_CC;
+extern vfloat64m2_t _ZGV2Nxvv_pow (vfloat64m2_t, vfloat64m2_t) LAT_RVV_CC;
+extern vfloat64m2_t _ZGV2M4vv_pow (vbool32_t, vfloat64m2_t, vfloat64m2_t) LAT_RVV_CC;
+extern vfloat64m2_t _ZGV2Mxvv_pow (vbool32_t, vfloat64m2_t, vfloat64m2_t) LAT_RVV_CC;
 
 /* ---- empty ABI controls (latency_noop.c) ---- */
 extern vfloat64m1_t latency_noop_m1 (vfloat64m1_t) LAT_RVV_CC;
@@ -436,7 +472,13 @@ probe_##TAG (unsigned k, unsigned round, lat_window *w)			\
 		      __riscv_vfadd (a2, a3, vl), vl);			\
   STORE (out, a0, vl);							\
   w->chain_checksum = lat_fnvbuf (out, (LANES));			\
-  w->checksum = w->chain_checksum;					\
+  /* Functional check: one real entry call on the frozen input.  The \
+   * accumulator above is a sum of results, not a function value. */	\
+  {									\
+    VT rx = LOAD ((const double *)(const void *) lat_input, vl);	\
+    STORE (out, CALL (rx), vl);						\
+  }									\
+  w->checksum = lat_fnvbuf (out, (LANES));				\
   LAT_CHECK (out, (LANES), NAME);					\
 }
 
@@ -469,7 +511,13 @@ probe_##TAG (unsigned k, unsigned round, lat_window *w)			\
 		      __riscv_vfadd (a2, a3, vl), vl);			\
   STORE (out, a0, vl);							\
   w->chain_checksum = lat_fnvbuf (out, (LANES));			\
-  w->checksum = w->chain_checksum;					\
+  /* Functional check: one real entry call on the frozen input.  The \
+   * accumulator above is a sum of results, not a function value. */	\
+  {									\
+    VT rx = LOAD ((const double *)(const void *) lat_input, vl);	\
+    STORE (out, CALL (rx), vl);						\
+  }									\
+  w->checksum = lat_fnvbuf (out, (LANES));				\
   LAT_CHECK (out, (LANES), NAME);					\
 }
 
@@ -602,7 +650,13 @@ probe_##TAG (unsigned k, unsigned round, lat_window *w)			\
 		      __riscv_vfadd (a2, a3, vl), vl);			\
   STORE (out, a0, vl);							\
   w->chain_checksum = lat_fnvbuf (out, (LANES));			\
-  w->checksum = w->chain_checksum;					\
+  /* Functional check: one real two-argument call on the frozen inputs. */ \
+  {									\
+    VT rx = LOAD ((const double *)(const void *) lat_input, vl);	\
+    VT rz = LOAD ((const double *)(const void *) lat_input2, vl);	\
+    STORE (out, CALL (rx, rz), vl);					\
+  }									\
+  w->checksum = lat_fnvbuf (out, (LANES));				\
   LAT_CHECK (out, (LANES), NAME);					\
 }
 
@@ -639,7 +693,13 @@ probe_##TAG (unsigned k, unsigned round, lat_window *w)			\
 		      __riscv_vfadd (a2, a3, vl), vl);			\
   STORE (out, a0, vl);							\
   w->chain_checksum = lat_fnvbuf (out, (LANES));			\
-  w->checksum = w->chain_checksum;					\
+  /* Functional check: one real two-argument call on the frozen inputs. */ \
+  {									\
+    VT rx = LOAD ((const double *)(const void *) lat_input, vl);	\
+    VT rz = LOAD ((const double *)(const void *) lat_input2, vl);	\
+    STORE (out, CALL (rx, rz), vl);					\
+  }									\
+  w->checksum = lat_fnvbuf (out, (LANES));				\
   LAT_CHECK (out, (LANES), NAME);					\
 }
 
@@ -1051,3 +1111,400 @@ static const lat_probe exp_probes[] = {
 const lat_probe_group lat_group_exp
   = {"exp", exp_probes, LAT_PROBE_COUNT (exp_probes)};
 #endif /* LAT_GROUP_EXP */
+
+/* ------------------------------------------------------------------------
+ * log: 8 ABI variants + 8 independent-call throughput probes + scalar libm
+ * control.  One binary per function (build_latency.py --groups log).
+ * ------------------------------------------------------------------------ */
+#ifdef LAT_GROUP_LOG
+#if !LAT_HAVE_ORACLE || !LAT_ORACLE_SCALAR
+#error "LAT_GROUP_LOG needs -DLAT_SCALAR_ORACLE=1"
+#endif
+#define LAT_CALL_LOG_M1_M2(v) _ZGV1M2v_log (lat_mask, (v))
+#define LAT_CALL_LOG_M1_Mx(v) _ZGV1Mxv_log (lat_mask, (v))
+#define LAT_CALL_LOG_M2_M4(v) _ZGV2M4v_log (lat_mask, (v))
+#define LAT_CALL_LOG_M2_Mx(v) _ZGV2Mxv_log (lat_mask, (v))
+
+LAT_DEFINE_MAP_PROBE (log_m1_N2, "log_m1_N2", LAT_LANES_M1, vfloat64m1_t,
+		      __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
+		      lat_map_log_m1, _ZGV1N2v_log)
+LAT_DEFINE_MAP_PROBE (log_m1_Nx, "log_m1_Nx", LAT_LANES_M1, vfloat64m1_t,
+		      __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
+		      lat_map_log_m1, _ZGV1Nxv_log)
+LAT_DEFINE_MASKED_MAP_PROBE (log_m1_M2, "log_m1_M2", LAT_LANES_M1,
+			     vfloat64m1_t, vbool64_t, __riscv_vmset_m_b64,
+			     __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
+			     lat_map_log_m1, LAT_CALL_LOG_M1_M2)
+LAT_DEFINE_MASKED_MAP_PROBE (log_m1_Mx, "log_m1_Mx", LAT_LANES_M1,
+			     vfloat64m1_t, vbool64_t, __riscv_vmset_m_b64,
+			     __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
+			     lat_map_log_m1, LAT_CALL_LOG_M1_Mx)
+LAT_DEFINE_MAP_PROBE (log_m2_N4, "log_m2_N4", LAT_LANES_M2, vfloat64m2_t,
+		      __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
+		      lat_map_log_m2, _ZGV2N4v_log)
+LAT_DEFINE_MAP_PROBE (log_m2_Nx, "log_m2_Nx", LAT_LANES_M2, vfloat64m2_t,
+		      __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
+		      lat_map_log_m2, _ZGV2Nxv_log)
+LAT_DEFINE_MASKED_MAP_PROBE (log_m2_M4, "log_m2_M4", LAT_LANES_M2,
+			     vfloat64m2_t, vbool32_t, __riscv_vmset_m_b32,
+			     __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
+			     lat_map_log_m2, LAT_CALL_LOG_M2_M4)
+LAT_DEFINE_MASKED_MAP_PROBE (log_m2_Mx, "log_m2_Mx", LAT_LANES_M2,
+			     vfloat64m2_t, vbool32_t, __riscv_vmset_m_b32,
+			     __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
+			     lat_map_log_m2, LAT_CALL_LOG_M2_Mx)
+
+LAT_DEFINE_TPUT_PROBE (log_m1_N2_tput, "log_m1_N2_tput", LAT_LANES_M1,
+		       vfloat64m1_t, __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
+		       _ZGV1N2v_log)
+LAT_DEFINE_TPUT_PROBE (log_m1_Nx_tput, "log_m1_Nx_tput", LAT_LANES_M1,
+		       vfloat64m1_t, __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
+		       _ZGV1Nxv_log)
+LAT_DEFINE_MASKED_TPUT_PROBE (log_m1_M2_tput, "log_m1_M2_tput", LAT_LANES_M1,
+			      vfloat64m1_t, vbool64_t, __riscv_vmset_m_b64,
+			      __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1, LAT_CALL_LOG_M1_M2)
+LAT_DEFINE_MASKED_TPUT_PROBE (log_m1_Mx_tput, "log_m1_Mx_tput", LAT_LANES_M1,
+			      vfloat64m1_t, vbool64_t, __riscv_vmset_m_b64,
+			      __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1, LAT_CALL_LOG_M1_Mx)
+LAT_DEFINE_TPUT_PROBE (log_m2_N4_tput, "log_m2_N4_tput", LAT_LANES_M2,
+		       vfloat64m2_t, __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
+		       _ZGV2N4v_log)
+LAT_DEFINE_TPUT_PROBE (log_m2_Nx_tput, "log_m2_Nx_tput", LAT_LANES_M2,
+		       vfloat64m2_t, __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
+		       _ZGV2Nxv_log)
+LAT_DEFINE_MASKED_TPUT_PROBE (log_m2_M4_tput, "log_m2_M4_tput", LAT_LANES_M2,
+			      vfloat64m2_t, vbool32_t, __riscv_vmset_m_b32,
+			      __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2, LAT_CALL_LOG_M2_M4)
+LAT_DEFINE_MASKED_TPUT_PROBE (log_m2_Mx_tput, "log_m2_Mx_tput", LAT_LANES_M2,
+			      vfloat64m2_t, vbool32_t, __riscv_vmset_m_b32,
+			      __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2, LAT_CALL_LOG_M2_Mx)
+
+static double
+lat_scalar_map_log (double y)
+{
+  return lat_scalar_clamp (y, 0.1, 2.0);
+}
+LAT_DEFINE_SCALAR_MAP_PROBE (log_scalar, "log_scalar",
+			   lat_scalar_map_log, log)
+
+static const lat_probe log_probes[] = {
+  {"log_m1_N2", probe_log_m1_N2},
+  {"log_m1_N2_tput", probe_log_m1_N2_tput},
+  {"log_m1_Nx", probe_log_m1_Nx},
+  {"log_m1_Nx_tput", probe_log_m1_Nx_tput},
+  {"log_m1_M2", probe_log_m1_M2},
+  {"log_m1_M2_tput", probe_log_m1_M2_tput},
+  {"log_m1_Mx", probe_log_m1_Mx},
+  {"log_m1_Mx_tput", probe_log_m1_Mx_tput},
+  {"log_m2_N4", probe_log_m2_N4},
+  {"log_m2_N4_tput", probe_log_m2_N4_tput},
+  {"log_m2_Nx", probe_log_m2_Nx},
+  {"log_m2_Nx_tput", probe_log_m2_Nx_tput},
+  {"log_m2_M4", probe_log_m2_M4},
+  {"log_m2_M4_tput", probe_log_m2_M4_tput},
+  {"log_m2_Mx", probe_log_m2_Mx},
+  {"log_m2_Mx_tput", probe_log_m2_Mx_tput},
+  {"log_scalar", probe_log_scalar},
+};
+const lat_probe_group lat_group_log
+  = {"log", log_probes, LAT_PROBE_COUNT (log_probes)};
+#endif /* LAT_GROUP_LOG */
+
+/* ------------------------------------------------------------------------
+ * sin: 8 ABI variants + 8 independent-call throughput probes + scalar libm
+ * control.  One binary per function (build_latency.py --groups sin).
+ * ------------------------------------------------------------------------ */
+#ifdef LAT_GROUP_SIN
+#if !LAT_HAVE_ORACLE || !LAT_ORACLE_SCALAR
+#error "LAT_GROUP_SIN needs -DLAT_SCALAR_ORACLE=1"
+#endif
+#define LAT_CALL_SIN_M1_M2(v) _ZGV1M2v_sin (lat_mask, (v))
+#define LAT_CALL_SIN_M1_Mx(v) _ZGV1Mxv_sin (lat_mask, (v))
+#define LAT_CALL_SIN_M2_M4(v) _ZGV2M4v_sin (lat_mask, (v))
+#define LAT_CALL_SIN_M2_Mx(v) _ZGV2Mxv_sin (lat_mask, (v))
+
+LAT_DEFINE_MAP_PROBE (sin_m1_N2, "sin_m1_N2", LAT_LANES_M1, vfloat64m1_t,
+		      __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
+		      lat_map_identity_m1, _ZGV1N2v_sin)
+LAT_DEFINE_MAP_PROBE (sin_m1_Nx, "sin_m1_Nx", LAT_LANES_M1, vfloat64m1_t,
+		      __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
+		      lat_map_identity_m1, _ZGV1Nxv_sin)
+LAT_DEFINE_MASKED_MAP_PROBE (sin_m1_M2, "sin_m1_M2", LAT_LANES_M1,
+			     vfloat64m1_t, vbool64_t, __riscv_vmset_m_b64,
+			     __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
+			     lat_map_identity_m1, LAT_CALL_SIN_M1_M2)
+LAT_DEFINE_MASKED_MAP_PROBE (sin_m1_Mx, "sin_m1_Mx", LAT_LANES_M1,
+			     vfloat64m1_t, vbool64_t, __riscv_vmset_m_b64,
+			     __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
+			     lat_map_identity_m1, LAT_CALL_SIN_M1_Mx)
+LAT_DEFINE_MAP_PROBE (sin_m2_N4, "sin_m2_N4", LAT_LANES_M2, vfloat64m2_t,
+		      __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
+		      lat_map_identity_m2, _ZGV2N4v_sin)
+LAT_DEFINE_MAP_PROBE (sin_m2_Nx, "sin_m2_Nx", LAT_LANES_M2, vfloat64m2_t,
+		      __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
+		      lat_map_identity_m2, _ZGV2Nxv_sin)
+LAT_DEFINE_MASKED_MAP_PROBE (sin_m2_M4, "sin_m2_M4", LAT_LANES_M2,
+			     vfloat64m2_t, vbool32_t, __riscv_vmset_m_b32,
+			     __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
+			     lat_map_identity_m2, LAT_CALL_SIN_M2_M4)
+LAT_DEFINE_MASKED_MAP_PROBE (sin_m2_Mx, "sin_m2_Mx", LAT_LANES_M2,
+			     vfloat64m2_t, vbool32_t, __riscv_vmset_m_b32,
+			     __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
+			     lat_map_identity_m2, LAT_CALL_SIN_M2_Mx)
+
+LAT_DEFINE_TPUT_PROBE (sin_m1_N2_tput, "sin_m1_N2_tput", LAT_LANES_M1,
+		       vfloat64m1_t, __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
+		       _ZGV1N2v_sin)
+LAT_DEFINE_TPUT_PROBE (sin_m1_Nx_tput, "sin_m1_Nx_tput", LAT_LANES_M1,
+		       vfloat64m1_t, __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
+		       _ZGV1Nxv_sin)
+LAT_DEFINE_MASKED_TPUT_PROBE (sin_m1_M2_tput, "sin_m1_M2_tput", LAT_LANES_M1,
+			      vfloat64m1_t, vbool64_t, __riscv_vmset_m_b64,
+			      __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1, LAT_CALL_SIN_M1_M2)
+LAT_DEFINE_MASKED_TPUT_PROBE (sin_m1_Mx_tput, "sin_m1_Mx_tput", LAT_LANES_M1,
+			      vfloat64m1_t, vbool64_t, __riscv_vmset_m_b64,
+			      __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1, LAT_CALL_SIN_M1_Mx)
+LAT_DEFINE_TPUT_PROBE (sin_m2_N4_tput, "sin_m2_N4_tput", LAT_LANES_M2,
+		       vfloat64m2_t, __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
+		       _ZGV2N4v_sin)
+LAT_DEFINE_TPUT_PROBE (sin_m2_Nx_tput, "sin_m2_Nx_tput", LAT_LANES_M2,
+		       vfloat64m2_t, __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
+		       _ZGV2Nxv_sin)
+LAT_DEFINE_MASKED_TPUT_PROBE (sin_m2_M4_tput, "sin_m2_M4_tput", LAT_LANES_M2,
+			      vfloat64m2_t, vbool32_t, __riscv_vmset_m_b32,
+			      __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2, LAT_CALL_SIN_M2_M4)
+LAT_DEFINE_MASKED_TPUT_PROBE (sin_m2_Mx_tput, "sin_m2_Mx_tput", LAT_LANES_M2,
+			      vfloat64m2_t, vbool32_t, __riscv_vmset_m_b32,
+			      __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2, LAT_CALL_SIN_M2_Mx)
+
+static double
+lat_scalar_map_sin (double y)
+{
+  return y;
+}
+LAT_DEFINE_SCALAR_MAP_PROBE (sin_scalar, "sin_scalar",
+			   lat_scalar_map_sin, sin)
+
+static const lat_probe sin_probes[] = {
+  {"sin_m1_N2", probe_sin_m1_N2},
+  {"sin_m1_N2_tput", probe_sin_m1_N2_tput},
+  {"sin_m1_Nx", probe_sin_m1_Nx},
+  {"sin_m1_Nx_tput", probe_sin_m1_Nx_tput},
+  {"sin_m1_M2", probe_sin_m1_M2},
+  {"sin_m1_M2_tput", probe_sin_m1_M2_tput},
+  {"sin_m1_Mx", probe_sin_m1_Mx},
+  {"sin_m1_Mx_tput", probe_sin_m1_Mx_tput},
+  {"sin_m2_N4", probe_sin_m2_N4},
+  {"sin_m2_N4_tput", probe_sin_m2_N4_tput},
+  {"sin_m2_Nx", probe_sin_m2_Nx},
+  {"sin_m2_Nx_tput", probe_sin_m2_Nx_tput},
+  {"sin_m2_M4", probe_sin_m2_M4},
+  {"sin_m2_M4_tput", probe_sin_m2_M4_tput},
+  {"sin_m2_Mx", probe_sin_m2_Mx},
+  {"sin_m2_Mx_tput", probe_sin_m2_Mx_tput},
+  {"sin_scalar", probe_sin_scalar},
+};
+const lat_probe_group lat_group_sin
+  = {"sin", sin_probes, LAT_PROBE_COUNT (sin_probes)};
+#endif /* LAT_GROUP_SIN */
+
+/* ------------------------------------------------------------------------
+ * cos: 8 ABI variants + 8 independent-call throughput probes + scalar libm
+ * control.  One binary per function (build_latency.py --groups cos).
+ * ------------------------------------------------------------------------ */
+#ifdef LAT_GROUP_COS
+#if !LAT_HAVE_ORACLE || !LAT_ORACLE_SCALAR
+#error "LAT_GROUP_COS needs -DLAT_SCALAR_ORACLE=1"
+#endif
+#define LAT_CALL_COS_M1_M2(v) _ZGV1M2v_cos (lat_mask, (v))
+#define LAT_CALL_COS_M1_Mx(v) _ZGV1Mxv_cos (lat_mask, (v))
+#define LAT_CALL_COS_M2_M4(v) _ZGV2M4v_cos (lat_mask, (v))
+#define LAT_CALL_COS_M2_Mx(v) _ZGV2Mxv_cos (lat_mask, (v))
+
+LAT_DEFINE_MAP_PROBE (cos_m1_N2, "cos_m1_N2", LAT_LANES_M1, vfloat64m1_t,
+		      __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
+		      lat_map_identity_m1, _ZGV1N2v_cos)
+LAT_DEFINE_MAP_PROBE (cos_m1_Nx, "cos_m1_Nx", LAT_LANES_M1, vfloat64m1_t,
+		      __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
+		      lat_map_identity_m1, _ZGV1Nxv_cos)
+LAT_DEFINE_MASKED_MAP_PROBE (cos_m1_M2, "cos_m1_M2", LAT_LANES_M1,
+			     vfloat64m1_t, vbool64_t, __riscv_vmset_m_b64,
+			     __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
+			     lat_map_identity_m1, LAT_CALL_COS_M1_M2)
+LAT_DEFINE_MASKED_MAP_PROBE (cos_m1_Mx, "cos_m1_Mx", LAT_LANES_M1,
+			     vfloat64m1_t, vbool64_t, __riscv_vmset_m_b64,
+			     __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
+			     lat_map_identity_m1, LAT_CALL_COS_M1_Mx)
+LAT_DEFINE_MAP_PROBE (cos_m2_N4, "cos_m2_N4", LAT_LANES_M2, vfloat64m2_t,
+		      __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
+		      lat_map_identity_m2, _ZGV2N4v_cos)
+LAT_DEFINE_MAP_PROBE (cos_m2_Nx, "cos_m2_Nx", LAT_LANES_M2, vfloat64m2_t,
+		      __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
+		      lat_map_identity_m2, _ZGV2Nxv_cos)
+LAT_DEFINE_MASKED_MAP_PROBE (cos_m2_M4, "cos_m2_M4", LAT_LANES_M2,
+			     vfloat64m2_t, vbool32_t, __riscv_vmset_m_b32,
+			     __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
+			     lat_map_identity_m2, LAT_CALL_COS_M2_M4)
+LAT_DEFINE_MASKED_MAP_PROBE (cos_m2_Mx, "cos_m2_Mx", LAT_LANES_M2,
+			     vfloat64m2_t, vbool32_t, __riscv_vmset_m_b32,
+			     __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
+			     lat_map_identity_m2, LAT_CALL_COS_M2_Mx)
+
+LAT_DEFINE_TPUT_PROBE (cos_m1_N2_tput, "cos_m1_N2_tput", LAT_LANES_M1,
+		       vfloat64m1_t, __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
+		       _ZGV1N2v_cos)
+LAT_DEFINE_TPUT_PROBE (cos_m1_Nx_tput, "cos_m1_Nx_tput", LAT_LANES_M1,
+		       vfloat64m1_t, __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
+		       _ZGV1Nxv_cos)
+LAT_DEFINE_MASKED_TPUT_PROBE (cos_m1_M2_tput, "cos_m1_M2_tput", LAT_LANES_M1,
+			      vfloat64m1_t, vbool64_t, __riscv_vmset_m_b64,
+			      __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1, LAT_CALL_COS_M1_M2)
+LAT_DEFINE_MASKED_TPUT_PROBE (cos_m1_Mx_tput, "cos_m1_Mx_tput", LAT_LANES_M1,
+			      vfloat64m1_t, vbool64_t, __riscv_vmset_m_b64,
+			      __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1, LAT_CALL_COS_M1_Mx)
+LAT_DEFINE_TPUT_PROBE (cos_m2_N4_tput, "cos_m2_N4_tput", LAT_LANES_M2,
+		       vfloat64m2_t, __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
+		       _ZGV2N4v_cos)
+LAT_DEFINE_TPUT_PROBE (cos_m2_Nx_tput, "cos_m2_Nx_tput", LAT_LANES_M2,
+		       vfloat64m2_t, __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
+		       _ZGV2Nxv_cos)
+LAT_DEFINE_MASKED_TPUT_PROBE (cos_m2_M4_tput, "cos_m2_M4_tput", LAT_LANES_M2,
+			      vfloat64m2_t, vbool32_t, __riscv_vmset_m_b32,
+			      __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2, LAT_CALL_COS_M2_M4)
+LAT_DEFINE_MASKED_TPUT_PROBE (cos_m2_Mx_tput, "cos_m2_Mx_tput", LAT_LANES_M2,
+			      vfloat64m2_t, vbool32_t, __riscv_vmset_m_b32,
+			      __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2, LAT_CALL_COS_M2_Mx)
+
+static double
+lat_scalar_map_cos (double y)
+{
+  return y;
+}
+LAT_DEFINE_SCALAR_MAP_PROBE (cos_scalar, "cos_scalar",
+			   lat_scalar_map_cos, cos)
+
+static const lat_probe cos_probes[] = {
+  {"cos_m1_N2", probe_cos_m1_N2},
+  {"cos_m1_N2_tput", probe_cos_m1_N2_tput},
+  {"cos_m1_Nx", probe_cos_m1_Nx},
+  {"cos_m1_Nx_tput", probe_cos_m1_Nx_tput},
+  {"cos_m1_M2", probe_cos_m1_M2},
+  {"cos_m1_M2_tput", probe_cos_m1_M2_tput},
+  {"cos_m1_Mx", probe_cos_m1_Mx},
+  {"cos_m1_Mx_tput", probe_cos_m1_Mx_tput},
+  {"cos_m2_N4", probe_cos_m2_N4},
+  {"cos_m2_N4_tput", probe_cos_m2_N4_tput},
+  {"cos_m2_Nx", probe_cos_m2_Nx},
+  {"cos_m2_Nx_tput", probe_cos_m2_Nx_tput},
+  {"cos_m2_M4", probe_cos_m2_M4},
+  {"cos_m2_M4_tput", probe_cos_m2_M4_tput},
+  {"cos_m2_Mx", probe_cos_m2_Mx},
+  {"cos_m2_Mx_tput", probe_cos_m2_Mx_tput},
+  {"cos_scalar", probe_cos_scalar},
+};
+const lat_probe_group lat_group_cos
+  = {"cos", cos_probes, LAT_PROBE_COUNT (cos_probes)};
+#endif /* LAT_GROUP_COS */
+
+/* ------------------------------------------------------------------------
+ * pow: binary function (two vector arguments), 8 ABI variants + 8
+ * independent-call throughput probes + scalar libm control.
+ * ------------------------------------------------------------------------ */
+#ifdef LAT_GROUP_POW
+#if !LAT_HAVE_ORACLE || !LAT_ORACLE_SCALAR
+#error "LAT_GROUP_POW needs -DLAT_SCALAR_ORACLE=1"
+#endif
+#define LAT_CALL_POW_M1_M2(x, z) _ZGV1M2vv_pow (lat_mask, (x), (z))
+#define LAT_CALL_POW_M1_Mx(x, z) _ZGV1Mxvv_pow (lat_mask, (x), (z))
+#define LAT_CALL_POW_M2_M4(x, z) _ZGV2M4vv_pow (lat_mask, (x), (z))
+#define LAT_CALL_POW_M2_Mx(x, z) _ZGV2Mxvv_pow (lat_mask, (x), (z))
+
+LAT_DEFINE_BINARY_MAP_PROBE (pow_m1_N2, "pow_m1_N2", LAT_LANES_M1, vfloat64m1_t,
+			    __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1, lat_map_pow_x_m1, lat_map_pow_z_m1,
+			    _ZGV1N2vv_pow)
+LAT_DEFINE_BINARY_MAP_PROBE (pow_m1_Nx, "pow_m1_Nx", LAT_LANES_M1, vfloat64m1_t,
+			    __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1, lat_map_pow_x_m1, lat_map_pow_z_m1,
+			    _ZGV1Nxvv_pow)
+LAT_DEFINE_BINARY_MASKED_MAP_PROBE (pow_m1_M2, "pow_m1_M2", LAT_LANES_M1,
+				   vfloat64m1_t, vbool64_t, __riscv_vmset_m_b64,
+				   __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1, lat_map_pow_x_m1, lat_map_pow_z_m1,
+				   LAT_CALL_POW_M1_M2)
+LAT_DEFINE_BINARY_MASKED_MAP_PROBE (pow_m1_Mx, "pow_m1_Mx", LAT_LANES_M1,
+				   vfloat64m1_t, vbool64_t, __riscv_vmset_m_b64,
+				   __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1, lat_map_pow_x_m1, lat_map_pow_z_m1,
+				   LAT_CALL_POW_M1_Mx)
+LAT_DEFINE_BINARY_MAP_PROBE (pow_m2_N4, "pow_m2_N4", LAT_LANES_M2, vfloat64m2_t,
+			    __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2, lat_map_pow_x_m2, lat_map_pow_z_m2,
+			    _ZGV2N4vv_pow)
+LAT_DEFINE_BINARY_MAP_PROBE (pow_m2_Nx, "pow_m2_Nx", LAT_LANES_M2, vfloat64m2_t,
+			    __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2, lat_map_pow_x_m2, lat_map_pow_z_m2,
+			    _ZGV2Nxvv_pow)
+LAT_DEFINE_BINARY_MASKED_MAP_PROBE (pow_m2_M4, "pow_m2_M4", LAT_LANES_M2,
+				   vfloat64m2_t, vbool32_t, __riscv_vmset_m_b32,
+				   __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2, lat_map_pow_x_m2, lat_map_pow_z_m2,
+				   LAT_CALL_POW_M2_M4)
+LAT_DEFINE_BINARY_MASKED_MAP_PROBE (pow_m2_Mx, "pow_m2_Mx", LAT_LANES_M2,
+				   vfloat64m2_t, vbool32_t, __riscv_vmset_m_b32,
+				   __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2, lat_map_pow_x_m2, lat_map_pow_z_m2,
+				   LAT_CALL_POW_M2_Mx)
+
+LAT_DEFINE_BINARY_TPUT_PROBE (pow_m1_N2_tput, "pow_m1_N2_tput", LAT_LANES_M1, vfloat64m1_t,
+			       __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
+			       _ZGV1N2vv_pow)
+LAT_DEFINE_BINARY_TPUT_PROBE (pow_m1_Nx_tput, "pow_m1_Nx_tput", LAT_LANES_M1, vfloat64m1_t,
+			       __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
+			       _ZGV1Nxvv_pow)
+LAT_DEFINE_BINARY_MASKED_TPUT_PROBE (pow_m1_M2_tput, "pow_m1_M2_tput", LAT_LANES_M1,
+				    vfloat64m1_t, vbool64_t, __riscv_vmset_m_b64,
+				    __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1, LAT_CALL_POW_M1_M2)
+LAT_DEFINE_BINARY_MASKED_TPUT_PROBE (pow_m1_Mx_tput, "pow_m1_Mx_tput", LAT_LANES_M1,
+				    vfloat64m1_t, vbool64_t, __riscv_vmset_m_b64,
+				    __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1, LAT_CALL_POW_M1_Mx)
+LAT_DEFINE_BINARY_TPUT_PROBE (pow_m2_N4_tput, "pow_m2_N4_tput", LAT_LANES_M2, vfloat64m2_t,
+			       __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
+			       _ZGV2N4vv_pow)
+LAT_DEFINE_BINARY_TPUT_PROBE (pow_m2_Nx_tput, "pow_m2_Nx_tput", LAT_LANES_M2, vfloat64m2_t,
+			       __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
+			       _ZGV2Nxvv_pow)
+LAT_DEFINE_BINARY_MASKED_TPUT_PROBE (pow_m2_M4_tput, "pow_m2_M4_tput", LAT_LANES_M2,
+				    vfloat64m2_t, vbool32_t, __riscv_vmset_m_b32,
+				    __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2, LAT_CALL_POW_M2_M4)
+LAT_DEFINE_BINARY_MASKED_TPUT_PROBE (pow_m2_Mx_tput, "pow_m2_Mx_tput", LAT_LANES_M2,
+				    vfloat64m2_t, vbool32_t, __riscv_vmset_m_b32,
+				    __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2, LAT_CALL_POW_M2_Mx)
+
+static double
+lat_scalar_map_pow_x (double y)
+{
+  return lat_scalar_clamp (y, 0.5, 2.0);
+}
+static double
+lat_scalar_map_pow_z (double x)
+{
+  return x + 0.5;
+}
+LAT_DEFINE_SCALAR_BINARY_MAP_PROBE (pow_scalar, "pow_scalar",
+				  lat_scalar_map_pow_x, lat_scalar_map_pow_z, pow)
+
+static const lat_probe pow_probes[] = {
+  {"pow_m1_N2", probe_pow_m1_N2},
+  {"pow_m1_N2_tput", probe_pow_m1_N2_tput},
+  {"pow_m1_Nx", probe_pow_m1_Nx},
+  {"pow_m1_Nx_tput", probe_pow_m1_Nx_tput},
+  {"pow_m1_M2", probe_pow_m1_M2},
+  {"pow_m1_M2_tput", probe_pow_m1_M2_tput},
+  {"pow_m1_Mx", probe_pow_m1_Mx},
+  {"pow_m1_Mx_tput", probe_pow_m1_Mx_tput},
+  {"pow_m2_N4", probe_pow_m2_N4},
+  {"pow_m2_N4_tput", probe_pow_m2_N4_tput},
+  {"pow_m2_Nx", probe_pow_m2_Nx},
+  {"pow_m2_Nx_tput", probe_pow_m2_Nx_tput},
+  {"pow_m2_M4", probe_pow_m2_M4},
+  {"pow_m2_M4_tput", probe_pow_m2_M4_tput},
+  {"pow_m2_Mx", probe_pow_m2_Mx},
+  {"pow_m2_Mx_tput", probe_pow_m2_Mx_tput},
+  {"pow_scalar", probe_pow_scalar},
+};
+const lat_probe_group lat_group_pow
+  = {"pow", pow_probes, LAT_PROBE_COUNT (pow_probes)};
+#endif /* LAT_GROUP_POW */

@@ -86,9 +86,9 @@ intercept = 窗口固定开销（两次 rdcycle、循环、入口/出口）
 
 | 文件 | 用途 |
 |---|---|
-| [latency_driver.c](<latency_driver.c>) | 探针定义：libmvec 入口链、空调用链、map-only 链、scalar nop 链；`LAT_SERIAL` 窗口边界 |
+| [latency_driver.c](<latency_driver.c>) | 探针定义：libmvec 入口链、独立调用吞吐链（`_tput`）、空调用链、map-only 链、scalar nop 链、标量 libm 对照链；`LAT_SERIAL` 窗口边界 |
 | [latency_main.c](<latency_main.c>) | 矩阵遍历、窗口缓冲、`LAT*` 协议输出、oracle 计数汇总 |
-| [latency_map.h](<latency_map.h>) | 两条闭环仿射 map（atan / acos），每步恰好 2 条向量 FP 指令 |
+| [latency_map.h](<latency_map.h>) | 闭环 map：atan/acos（2 条指令）、exp（3）、log（2）、sin/cos（恒等，0）、pow（3） |
 | [latency_noop.c](<latency_noop.c>) | 与入口**同 ABI** 的空函数（向量参数、`ret`），调用开销对照 |
 | [latency_probe.h](<latency_probe.h>) | 探针表/窗口结构/协议常量（rounds、prelude、K 列表、LANES） |
 | [build_latency.py](<build_latency.py>) | 从给定前缀构建 BIN，记录 sha256/manifest，objdump 审计依赖链 |
@@ -101,7 +101,7 @@ intercept = 窗口固定开销（两次 rdcycle、循环、入口/出口）
 | 依赖 | 说明 |
 |---|---|
 | 工具链前缀 | `--prefix`，需要 `bin/riscv64-unknown-linux-gnu-{gcc,objdump,nm,objcopy}` 与 `sysroot/.../libmvec.a`；`libm.a` 是 ld script，`-lm` 会一起拉 `libmvec.a` |
-| 冻结参考位 | `--data-dir` 下的 `atan.h`/`acos.h`（`input_bits`/`reference_bits`/`ORACLE_LIMIT`），默认指向 `.dsh/experiments/2026-11-15-2244-libmvec-expand/inputs/perf` |
+| 功能参考 | atan/acos 用 `--data-dir` 下的 `atan.h`/`acos.h`（`input_bits`/`reference_bits`/`ORACLE_LIMIT`），默认指向 `.dsh/experiments/2026-11-15-2244-libmvec-expand/inputs/perf`；exp/log/sin/cos/pow 用**同库标量 libm** 在窗口外复算（`LAT_ORACLE_SCALAR`，逐元素 ≤2 ULP），不需要冻结头 |
 | 裸机运行时 | 本仓 `single/veclibm-runtime.c`、`autovec/av_runtime.{c,h}`、`autovec/tls.ld`、`thirdparty/link.ld`、`thirdparty/{am,klib}-riscv64-xs.a` |
 | 仿真器 | gsim `emu-gsim-*`（非 static）或 verilator `emu-verilator-j*`；DiffTest refmodel；DRAMsim3 ini |
 | 固定配置 | VLEN=128（程序内校验 `vlenb==16`）、SEW=e64、LMUL=m1/m2、lane 数 = 2/4、seed 123456789 |
@@ -255,6 +255,28 @@ python3 -B single/libmvec/latency/latency_calibrate.py \
   --output data/latency-calibration-$STAMP.csv
 ```
 
+### 7.1 五函数（exp/log/sin/cos/pow）的 BIN
+
+每个函数一个 BIN：8 个 ABI 变体（`m1/m2 × N/M × 2/4/x`）+ 对应 8 个 `_tput` 吞吐探针 +
+1 个 `<fn>_scalar` 标量 libm 对照。功能校验用同库标量 libm（≤2 ULP），构建审计覆盖全部 17 个探针。
+
+```sh
+# 构建（exp 为例；log/sin/cos/pow 改 --groups/--tag 即可）
+python3 -B single/libmvec/latency/build_latency.py \
+  --prefix <prefix> --output <new-dir>/exp --tag exp --groups exp \
+  --k-list 0,4,8,16,32 --rounds 10 --serial 1
+
+# smoke 只跑 2 个变体 + 标量对照（编译期 --entries 过滤）
+python3 -B single/libmvec/latency/build_latency.py \
+  --prefix <prefix> --output <new-dir>/exp-smoke --tag exp-smoke --groups exp \
+  --entries exp_m1_N2,exp_m1_M2,exp_scalar --k-list 4,32 --rounds 3 --serial 1
+python3 -B single/libmvec/latency/run_latency.py --kind gsim \
+  --bin <new-dir>/exp-smoke/latency-exp-smoke.bin --output <timestamped-run-dir>
+```
+
+smoke 的通过标准：`GOOD TRAP`、`LAT_END status=ok failed=0`、无 `cause=2`、无 `LAT_ERROR`。
+`rounds=3` 只有 first+warmup，没有 steady 相位，因此 smoke 结果不用于拟合。
+
 ## 8. 校准结果
 
 见任务记录 `.dsh/tasks/20261117-0113-libmvec-latency/` 的 `progress.md`、
@@ -300,7 +322,7 @@ python3 -B single/libmvec/latency/latency_calibrate.py \
 | | `serial` | 窗口两端是否用 `sfence.vma` 排空（1/0） |
 | | `nop_block`/`nop_block64` | 两个 nop 探针每步的 `addi` 条数（1/64） |
 | | `k`/`groups`/`entries` | 本次矩阵的 K 列表、启用的组、启用的探针 |
-| `LAT` | `entry`/`K`/`calls` | 探针名 / 窗口内链式调用次数 / 同上（便于审计） |
+| `LAT` | `entry`/`K`/`calls` | 探针名 / 循环步数 / 窗口内实际调用次数：延迟探针 = K，吞吐探针（`_tput`）= 4K；`latency_parse.py` 用 `calls` 作拟合 x 轴 |
 | | `phase` | `first`（round 0）/ `warmup`（1–2）/ `steady`（3+） |
 | | `begin`/`cycles` | 窗口起始计数 / `end−begin`，全部是目标端 `rdcycle` 原始值 |
 | | `checksum` | 窗口外 oracle 复算输出的 FNV-1a（hex）；只作轨迹指纹 |
@@ -326,8 +348,9 @@ python3 -B single/libmvec/latency/latency_calibrate.py \
    不能把本数据的 cycle 数当作其它配置的结论。
 7. **gsim/verilator 的周期模型不同。** 两者都可用于自检与相对比较，但同一 BIN 的绝对周期
    不保证一致；跨仿真器的数字必须分开报告。
-8. **不替代吞吐测量。** 本框架不测独立调用吞吐、cache 行为或向量单元占用率；
-   “延迟低”不能推出“吞吐高”，反之亦然。
+8. **吞吐模式是四路独立调用，不是完整吞吐模型。** `_tput` 探针用 4 个 loop-invariant 输入、
+   4 条独立累加链，测的是无数据依赖时的调用吞吐；累加器本身有 4 条 `vfadd`/步的固定开销，
+   且不覆盖 cache/取指/向量单元占用率。“延迟低”不能推出“吞吐高”，两种模式的数字不能混算。
 9. **UART 成本。** 每行 `LAT` 输出在 RTL 模型上约上万 cycle，因此整程序时长由输出行数决定，
    与测量窗口长度关系不大；本框架已把打印移出计时窗口并按 (entry,K) 汇总部分冗余字段，
    但**不能**把整程序 cycle 当作测量结果。
