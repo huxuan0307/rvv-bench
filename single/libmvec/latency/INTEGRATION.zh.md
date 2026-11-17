@@ -62,4 +62,8 @@ map 用 0–3 条向量 intrinsic（sin/cos 恒等映射为 0 条；log 为 max+
 - 构建审计：`AUDIT` 表覆盖 17×5=85 个探针（map 指令数、call site、回边、符号拉取）。
 - 缺口：尚未跑正式 45 组测量矩阵；verilator 未抽查新函数；`latency_calibrate.py` 的派生延迟检查仍默认只认
   `atan_`/`acos_` 前缀（新函数需要显式 `--entry-prefixes`/`--strict-entries`）；吞吐探针的累加器会引入
-  每调用固定的几条 `vfadd` 开销，只能与同模式数字比较，不能直接当纯吞吐。
+  每调用固定的几条 `vfadd` 开销，且 vector ABI 的 v8/v8-v9 参数返回寄存器会带来调用间搬运串行化，
+  只能与同模式数字比较，不能直接当纯吞吐。
+- 已修 bug：吞吐探针最初把累加器当函数输出做 oracle 校验，K=0 时输出为 0、K>0 时为求和，导致
+  `exp_m1_N2_tput` 40/40 校验失败（`LAT_END status=fail`）。现在累加器只做 chain checksum，
+  功能校验改为在窗口外对冻结输入做一次真实调用。
