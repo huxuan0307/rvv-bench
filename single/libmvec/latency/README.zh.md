@@ -258,7 +258,10 @@ python3 -B single/libmvec/latency/latency_calibrate.py \
 ### 7.1 五函数（exp/log/sin/cos/pow）的 BIN
 
 每个函数一个 BIN：8 个 ABI 变体（`m1/m2 × N/M × 2/4/x`）+ 对应 8 个 `_tput` 吞吐探针 +
-1 个 `<fn>_scalar` 标量 libm 对照。功能校验用同库标量 libm（≤2 ULP），构建审计覆盖全部 17 个探针。
+1 个 `<fn>_scalar` 标量 libm 对照（exp 另加 `exp_scalar_sat` 饱和工作点对照，故为 18 个探针，
+其余 17 个）。功能校验用同库标量 libm（≤2 ULP），构建审计覆盖全部探针。标量对照的 clamp 用
+内联 `fmin.d`/`fmax.d` 写成无分支，map 收敛到钳位不活跃的工作点；构建审计会拒绝“分支选常数”
+或返回值没有流到下一次调用输入的标量链（详细要求见 `INTEGRATION.zh.md` §3/§4）。
 
 ```sh
 # 构建（exp 为例；log/sin/cos/pow 改 --groups/--tag 即可）

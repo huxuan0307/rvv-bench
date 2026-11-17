@@ -256,11 +256,36 @@ static const double lat_zero[8] = { 0.0, 0.0, 0.0, 0.0,
 
 /* Scalar counterparts of the vector maps, used by the scalar libm control
  * chain.  -ffp-contract=off keeps them instruction-for-instruction equal to
- * the vector maps (no fused multiply-add). */
+ * the vector maps (no fused multiply-add).
+ *
+ * The clamp must stay branchless.  The former `v < lo ? lo : (v > hi ? hi : v)`
+ * compiled to flt.d + bnez: on a saturated orbit the compare skips the
+ * arithmetic and moves a constant into fa0, so the next call no longer waits
+ * for the returned value and the window measures call throughput instead of
+ * latency.  FMIN.D/FMAX.D are unconditional FP instructions, so every
+ * iteration keeps the previous return value on the FP data path.  The
+ * operands are finite on every orbit we seed, so the NaN-selection rule of
+ * these instructions never applies. */
+static inline double
+lat_fmin_d (double a, double b)
+{
+  double r;
+  __asm__ ("fmin.d %0, %1, %2" : "=f" (r) : "f" (a), "f" (b));
+  return r;
+}
+
+static inline double
+lat_fmax_d (double a, double b)
+{
+  double r;
+  __asm__ ("fmax.d %0, %1, %2" : "=f" (r) : "f" (a), "f" (b));
+  return r;
+}
+
 static inline double
 lat_scalar_clamp (double v, double lo, double hi)
 {
-  return v < lo ? lo : (v > hi ? hi : v);
+  return lat_fmin_d (lat_fmax_d (v, lo), hi);
 }
 
 /* Total order on IEEE-754 bit patterns so a one-bit difference stays one. */
@@ -704,7 +729,11 @@ probe_##TAG (unsigned k, unsigned round, lat_window *w)			\
 }
 
 /* Scalar libm control chain: the mapped scalar routine sits in the same K
- * loop as the vector variants, so cycles/call is directly comparable. */
+ * loop as the vector variants, so cycles/call is directly comparable.  The
+ * map is branchless by construction (FMIN/FMAX inline asm for every clamp), so
+ * the next iteration's x is always produced from this iteration's return
+ * value on the FP data path; build_latency.py audits the loop for both a real
+ * call and a tainted fa0/fa1 feed. */
 #define LAT_DEFINE_SCALAR_MAP_PROBE(TAG, NAME, MAPF, CALLF)		\
 static void								\
 probe_##TAG (unsigned k, unsigned round, lat_window *w)			\
@@ -1082,12 +1111,31 @@ LAT_DEFINE_MASKED_TPUT_PROBE (exp_m2_Mx_tput, "exp_m2_Mx_tput", LAT_LANES_M2,
 			      __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
 			      LAT_CALL_EXP_M2_MX)
 
+/* exp, non-saturated operating point.  gain = 0.5/exp(0.5), so the fixed
+ * point is x=0.5 with y=exp(0.5)=1.6487 strictly inside the clamp, and the
+ * local slope of the map is gain*exp(0.5) = 0.5 (contracting).  The clamp
+ * still has to be branchless: it is a guard for the first step, not a
+ * replacement for the multiply. */
+#define LAT_EXP_GAIN 0.3032653298563167
 static double
 lat_scalar_map_exp (double y)
+{
+  return LAT_EXP_GAIN * lat_scalar_clamp (y, 1.0, 2.5);
+}
+
+/* exp, saturated operating point (control).  Same orbit as the old probe
+ * (x -> 1, exp(1)=2.718 clamped to 2.0) but evaluated with FMIN/FMAX, so the
+ * subtract consumes the clamped return value instead of a branch-selected
+ * constant.  Comparing this probe with exp_scalar separates "the clamp output
+ * is locally constant" from "the chain is bypassed". */
+static double
+lat_scalar_map_exp_sat (double y)
 {
   return lat_scalar_clamp (y, 0.1, 2.0) - 1.0;
 }
 LAT_DEFINE_SCALAR_MAP_PROBE (exp_scalar, "exp_scalar", lat_scalar_map_exp, exp)
+LAT_DEFINE_SCALAR_MAP_PROBE (exp_scalar_sat, "exp_scalar_sat",
+			     lat_scalar_map_exp_sat, exp)
 
 static const lat_probe exp_probes[] = {
   {"exp_m1_N2", probe_exp_m1_N2},
@@ -1107,6 +1155,7 @@ static const lat_probe exp_probes[] = {
   {"exp_m2_M4_tput", probe_exp_m2_M4_tput},
   {"exp_m2_Mx_tput", probe_exp_m2_Mx_tput},
   {"exp_scalar", probe_exp_scalar},
+  {"exp_scalar_sat", probe_exp_scalar_sat},
 };
 const lat_probe_group lat_group_exp
   = {"exp", exp_probes, LAT_PROBE_COUNT (exp_probes)};
@@ -1179,10 +1228,16 @@ LAT_DEFINE_MASKED_TPUT_PROBE (log_m2_Mx_tput, "log_m2_Mx_tput", LAT_LANES_M2,
 			      vfloat64m2_t, vbool32_t, __riscv_vmset_m_b32,
 			      __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2, LAT_CALL_LOG_M2_Mx)
 
+/* log: x' = 0.8 + 0.4*clamp(y,-1,1) in [0.4,1.2].  The fixed point is
+ * x=0.58671 with log(x)=-0.533 (clamp inactive, |dx'/dx|=0.682), so the orbit
+ * settles on one reproducible input instead of the old x=0.1 where log(0.1)
+ * < 0.1 made the clamp return the constant 0.1 forever.  The clamp keeps the
+ * next input strictly positive even if a different seed makes log() return
+ * -inf, and it is branchless (FMIN/FMAX). */
 static double
 lat_scalar_map_log (double y)
 {
-  return lat_scalar_clamp (y, 0.1, 2.0);
+  return 0.8 + 0.4 * lat_scalar_clamp (y, -1.0, 1.0);
 }
 LAT_DEFINE_SCALAR_MAP_PROBE (log_scalar, "log_scalar",
 			   lat_scalar_map_log, log)
@@ -1473,10 +1528,15 @@ LAT_DEFINE_BINARY_MASKED_TPUT_PROBE (pow_m2_Mx_tput, "pow_m2_Mx_tput", LAT_LANES
 				    vfloat64m2_t, vbool32_t, __riscv_vmset_m_b32,
 				    __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2, LAT_CALL_POW_M2_Mx)
 
+/* pow: x' = 0.5*clamp(y,0.5,2.0) + 0.4259006208709515, z' = x'+0.5.  The
+ * offset is 0.8 - 0.5*0.8^1.3, so (x,z)=(0.8,1.3) is a fixed point with
+ * y=0.748 strictly inside the clamp (local slope 0.52).  The old map drove
+ * x to 2 and z to 2.5, where pow(2,2.5)>2 made the branchy clamp select the
+ * constant 2 for every following iteration. */
 static double
 lat_scalar_map_pow_x (double y)
 {
-  return lat_scalar_clamp (y, 0.5, 2.0);
+  return 0.5 * lat_scalar_clamp (y, 0.5, 2.0) + 0.4259006208709515;
 }
 static double
 lat_scalar_map_pow_z (double x)

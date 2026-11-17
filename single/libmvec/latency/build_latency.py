@@ -31,6 +31,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -119,6 +120,12 @@ for _fn, _meta in FAMILIES.items():
                        binary=_meta["binary"],
                        entries=family_entries(_fn))
 
+# Extra scalar control: the historical exp map driven to its saturated
+# operating point, re-measured with the branchless clamp.  It is a control,
+# not a replacement for exp_scalar: same orbit as the old probe, but a valid
+# data path.  The build's dependency audit treats it like any scalar entry.
+GROUPS["exp"]["entries"].append("exp_scalar_sat")
+
 
 # probe table symbol -> probe function symbol (as emitted by latency_driver.c)
 PROBE_FUNCS = {
@@ -171,6 +178,10 @@ AUDIT = {
     "acos_m1_M2": dict(callee="_ZGV1M2v_acos", vfp_min=2, loop=True),
     "acos_m2_M4": dict(callee="_ZGV2M4v_acos", vfp_min=2, loop=True),
 }
+# Scalar entries must also call the scalar libm symbol and must keep the
+# next input on the FP data path: no conditional branch may skip the map, and
+# the registers the call consumes must be tainted by the previous return.
+SCALAR_MAP_MIN = {"exp": 3, "log": 4, "sin": 0, "cos": 0, "pow": 4}
 for _fn, _meta in FAMILIES.items():
     _mid = "v" if _meta["binary"] else ""
     for _suffix, _tmpl in ABI_VARIANTS:
@@ -181,12 +192,38 @@ for _fn, _meta in FAMILIES.items():
             callee=_sym, vfp_min=0, loop=True,
             note="4 independent loop-invariant calls per step, no data dependency")
     AUDIT[f"{_fn}_scalar"] = dict(
-        callee=None, vfp_min=0, loop=True,
-        note="scalar libm control chain")
+        callee=_fn, vfp_min=0, loop=True,
+        scalar_map_min=SCALAR_MAP_MIN[_fn],
+        scalar_ret_inputs=2 if _meta["binary"] else 1,
+        note="scalar libm control chain, branchless map")
+AUDIT["exp_scalar_sat"] = dict(
+    callee="exp", vfp_min=0, loop=True, scalar_map_min=3,
+    scalar_ret_inputs=1,
+    note="scalar libm control chain, saturated operating point")
 
 VFP_MNEMONICS = ("vfmul", "vfadd", "vfsub", "vfmacc", "vfmadd", "vfnmacc",
                  "vfnmadd", "vfmsac", "vfmsub", "vfrsub", "vfdiv", "vfsqrt",
                  "vfmin", "vfmax", "vfmerge")
+
+# scalar FP helpers for the audit of the libm control chains
+SCALAR_FP_ARITH = ("fmul.d", "fadd.d", "fsub.d", "fdiv.d", "fsqrt.d",
+                   "fmax.d", "fmin.d", "fmadd.d", "fmsub.d", "fnmadd.d",
+                   "fnmsub.d", "fmv.d", "fneg.d", "fabs.d")
+SCALAR_FP_LOAD = ("fld", "flw", "flh", "flq")
+SCALAR_FP_STORE = ("fsd", "fsw", "fsh", "fsq")
+SCALAR_FP_WRITE = SCALAR_FP_ARITH + SCALAR_FP_LOAD + ("fli.d",)
+MEM_OPERAND_RE = re.compile(r"^(-?(?:0x[0-9a-f]+|\d+))\(([a-z0-9]+)\)$")
+COND_BRANCH_RE = re.compile(
+    r"^(?:c\.)?(?:beq|bne|blt|bge|bltu|bgeu|bgt|ble|bgtu|bleu|beqz|bnez|"
+    r"bltz|bgez|blez|bgtz)\b")
+
+
+def mem_operand(op):
+    """('offset', 'base') for `8(sp)`-style operands, else None."""
+    m = MEM_OPERAND_RE.match(op.strip())
+    if not m:
+        return None
+    return int(m.group(1), 0), m.group(2)
 
 NOOP_SYMBOLS = ["latency_noop_m1", "latency_noop_m2",
                 "latency_noop_mask_m2", "latency_noop_mask_m4"]
@@ -351,9 +388,158 @@ def symbol_ranges(nm, path, outdir, label):
     return ranges
 
 
+# Scalar audit: map ABI register names to the f0..f31 canonical numbers so the
+# taint propagation below can match `fa0 = fa0 + fs0` across aliases.
+ABI_FREG = {}
+for _i in range(8):
+    ABI_FREG[f"ft{_i}"] = _i
+    ABI_FREG[f"fa{_i}"] = 10 + _i
+ABI_FREG["fs0"] = 8
+ABI_FREG["fs1"] = 9
+for _i in range(2, 12):
+    ABI_FREG[f"fs{_i}"] = 18 + (_i - 2)
+for _i in range(8, 12):
+    ABI_FREG[f"ft{_i}"] = 28 + (_i - 8)
+
+
+def fcanon(name):
+    """Canonical f-register number for an ABI name, or None."""
+    n = name.strip()
+    if not n:
+        return None
+    if n[0] == "f" and n[1:].isdigit():
+        return int(n[1:])
+    return ABI_FREG.get(n)
+
+
+def find_k_loop(insns):
+    """Locate the dependency-chain K loop: the last backward branch.
+
+    GCC ends the timed loop with a conditional branch but may follow it with
+    an unconditional ``j`` to an epilogue placed earlier in the function; that
+    jump is backward by address but is not the loop back-edge.  Prefer the
+    last conditional backward branch, fall back to any backward branch for a
+    bottom-tested loop.  Returns (loop_start, loop_end) or None.
+    """
+    cands = []
+    for addr, insn in insns:
+        if not insn:
+            continue
+        mnem = insn.split()[0]
+        if not mnem.startswith(("j", "b", "c.j", "c.b")):
+            continue
+        m = re.search(r"\b([0-9a-f]+) <", insn)
+        if not m:
+            continue
+        target = int(m.group(1), 16)
+        if target < addr:
+            cands.append((addr, target, bool(COND_BRANCH_RE.match(mnem))))
+    if not cands:
+        return None
+    cond = [c for c in cands if c[2]]
+    addr, target, _ = max(cond or cands)
+    return target, addr
+
+
+def audit_scalar_loop(entry, spec, insns, relocs):
+    """Prove the scalar K loop is a real, branchless dependency chain.
+
+    Checks, inside the last (K) loop only:
+      * exactly one call relocation to the scalar libm symbol;
+      * no conditional branch other than the loop back-edge, so no compare can
+        select a constant in place of the mapped return value;
+      * the map keeps at least ``scalar_map_min`` FP arithmetic instructions;
+      * fa0 (and fa1 for pow) at the next call are tainted by the previous
+        call's return value, with loads/constants clearing taint.
+    """
+    problems = []
+    notes = []
+    loop = find_k_loop(insns)
+    if loop is None:
+        return ["no backward branch (K loop missing)"], notes
+    loop_start, loop_end = loop
+    body = sorted((a, insn) for a, insn in insns
+                  if loop_start <= a <= loop_end)
+    calls = [a for a, rtype, target in relocs
+             if loop_start <= a <= loop_end
+             and (rtype.startswith("R_RISCV_CALL") or rtype == "R_RISCV_JAL")
+             and target == spec["callee"]]
+    if len(calls) != 1:
+        problems.append(
+            f"{len(calls)} call sites to {spec['callee']} in the K loop "
+            f"(need exactly 1)")
+        return problems, notes
+    call_site = calls[0]
+    notes.append(f"K loop {hex(loop_start)}..{hex(loop_end)}, "
+                 f"real call at {hex(call_site)}")
+    for a, insn in body:
+        if not insn:
+            continue
+        if COND_BRANCH_RE.match(insn.split()[0]) and a != loop_end:
+            problems.append(
+                f"conditional branch inside the K loop at {hex(a)}: {insn}")
+    arith = [insn for a, insn in body
+             if insn and insn.split()[0] in SCALAR_FP_ARITH
+             and insn.split()[0] != "fmv.d"]
+    if len(arith) < spec["scalar_map_min"]:
+        problems.append(
+            f"only {len(arith)} scalar FP map insn(s), "
+            f"need {spec['scalar_map_min']}")
+    else:
+        notes.append("scalar map: " + "; ".join(arith))
+    # scan one iteration starting after the call and wrapping to the loop head
+    order = [(a, insn) for a, insn in body if a > call_site] + \
+            [(a, insn) for a, insn in body if a <= call_site]
+    tainted = {10}  # fa0 carries the call's return value
+    slots = set()   # (offset, base) of spilled tainted doubles
+    required = [10] + ([11] if spec.get("scalar_ret_inputs", 1) == 2 else [])
+    for _a, insn in order:
+        if not insn:
+            continue
+        parts = insn.replace("\t", " ").split(None, 1)
+        mnem = parts[0]
+        if len(parts) < 2:
+            continue
+        ops = [op.strip() for op in parts[1].split(",")]
+        if mnem in SCALAR_FP_STORE:
+            src = fcanon(ops[0].split()[0])
+            key = mem_operand(ops[1]) if len(ops) > 1 else None
+            if key is not None:
+                if src in tainted:
+                    slots.add(key)
+                else:
+                    slots.discard(key)
+            continue
+        if mnem not in SCALAR_FP_WRITE:
+            continue
+        dest = fcanon(ops[0].split()[0])
+        if dest is None:
+            continue
+        if mnem in SCALAR_FP_LOAD:
+            key = mem_operand(ops[1]) if len(ops) > 1 else None
+            if key is not None and key in slots:
+                tainted.add(dest)
+            else:
+                tainted.discard(dest)
+            continue
+        srcs = [fcanon(op.split()[0]) for op in ops[1:]]
+        srcs = [s for s in srcs if s is not None]
+        if any(s in tainted for s in srcs):
+            tainted.add(dest)
+        else:
+            tainted.discard(dest)
+    missing = [f"f{r}" for r in required if r not in tainted]
+    if missing:
+        problems.append(
+            "next call reads untainted " + ", ".join(missing)
+            + " (return value does not reach the call input)")
+    else:
+        notes.append("tainted call inputs: " + ", ".join(f"f{r}" for r in required))
+    return problems, notes
+
+
 def audit_probe(entry, items, start, end, outdir):
     """Verify one probe body keeps the dependency chain the harness claims."""
-    import re
     spec = AUDIT[entry]
     problems = []
     notes = []
@@ -416,23 +602,22 @@ def audit_probe(entry, items, start, end, outdir):
             notes.append(f"dependent addi (rd==rs1,imm=1): {len(dependent)}")
 
     # The callee and the map must sit inside the same back-edge loop.
-    back_edges = []
-    for addr, insn in insns:
-        if not insn:
-            continue
-        mnem = insn.split()[0]
-        if mnem.startswith(("j", "b", "c.j", "c.b")):
-            m = re.search(r"\b([0-9a-f]+) <", insn)
-            if m and int(m.group(1), 16) < addr:
-                back_edges.append(addr)
+    loop = find_k_loop(insns)
     if spec.get("loop", True):
-        if not back_edges:
+        if loop is None:
             problems.append("no backward branch (K loop missing)")
         else:
-            last = max(back_edges)
-            if call_sites and max(call_sites) > last:
-                problems.append("call site after the loop back-edge")
-            notes.append(f"K loop back-edge at {hex(last)}")
+            loop_start, loop_end = loop
+            in_loop = [a for a in call_sites
+                       if loop_start <= a <= loop_end]
+            if spec["callee"] is not None and not in_loop:
+                problems.append("no call site inside the K loop")
+            notes.append(f"K loop back-edge at {hex(loop_end)}")
+    if "scalar_map_min" in spec:
+        scalar_problems, scalar_notes = audit_scalar_loop(
+            entry, spec, insns, relocs)
+        problems.extend(scalar_problems)
+        notes.extend(scalar_notes)
     return problems, notes
 
 

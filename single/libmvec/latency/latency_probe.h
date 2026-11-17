@@ -17,9 +17,12 @@
 #define LAT_ROUNDS 10
 #endif
 
-/* Untimed chain steps executed once per (entry, K) before round 0.  Both maps
- * are contracting (|dx'/dx| < 0.65), so this reaches the closed-loop operating
- * point before anything is timed. */
+/* Untimed chain steps executed once per (entry, K) before round 0.  The
+ * atan/acos/exp/log/pow maps and the scalar control maps contract fast enough
+ * (|dx'/dx| <= 0.68) that 16 steps reach the closed-loop operating point.
+ * The sin/cos identity maps contract only near their fixed point (slope -> 1
+ * at x=0), so their steady windows still drift with K and round; that is
+ * recorded in fit.csv (r2 / max_rel_residual) instead of being hidden. */
 #ifndef LAT_PRELUDE
 #define LAT_PRELUDE 16
 #endif

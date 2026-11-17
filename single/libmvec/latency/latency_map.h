@@ -21,12 +21,28 @@
  *         x' = clamp(y, 0.5, 2.0), z' = x' + 0.5
  *
  * The clamp needs two instructions (max + min) and exp/pow add one more for
- * the affine step, so a map is 0-3 vector FP instructions.  The orbits
- * converge to their unique fixed point (exp: x = 0, log: x = 0.1, sin/cos:
- * x = 0, pow: x = 2, z = 2.5), so the timed windows measure one reproducible
- * operating point.  The build compiles with
- * -ffp-contract=off: GCC would otherwise fold the pair into a single vfmacc
- * and "map-only" would stop being two instructions.
+ * the affine step, so a map is 0-3 vector FP instructions.  The build
+ * compiles with -ffp-contract=off: GCC would otherwise fold the pair into a
+ * single vfmacc and "map-only" would stop being two instructions.
+ *
+ * The orbits are NOT all unique fixed points; two of them are saturated or
+ * neutral, which is fine for a vector chain (the min/max still consume the
+ * previous register) but must not be mistaken for a single operating point:
+ *
+ *   atan/acos: contract to x = 0 (|dx'/dx| < 0.65).
+ *   exp:  x >= 0 side converges to x = 1, where exp(1)=2.718 is clamped to
+ *         2.0 (saturated); the x < 0 side approaches x = 0 (neutral, close to
+ *         1 slope), so mixed-sign lanes do not share one fixed point and
+ *         chain_stable can legitimately be "no".
+ *   log:  converges to x = 0.1, where log(0.1) = -2.303 is clamped to 0.1
+ *         (saturated lower bound).
+ *   sin/cos: identity map, x -> 0 (sin, slowly) or x -> 0.739085 (cos).
+ *   pow:  x -> 2, z -> 2.5; pow(2,2.5) = 5.657 is clamped to 2.0.
+ *
+ * The scalar libm control chain uses its own maps (see latency_driver.c):
+ * exp/log/pow settle on a locally unsaturated point so the scalar dependency
+ * chain is unambiguous, while sin/cos keep the identity map and inherit the
+ * drift described above.
  */
 #ifndef LATENCY_MAP_H
 #define LATENCY_MAP_H

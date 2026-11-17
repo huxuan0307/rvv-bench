@@ -24,13 +24,15 @@
 
 map 用 0–3 条向量 intrinsic（sin/cos 恒等映射为 0 条；log 为 max+min 两条；exp 为 max+min+sub 三条；pow 为 max+min+add 三条），`-ffp-contract=off`；K=0/4/8/16/32，每点 1 first+2 warmup+7 steady，`rdcycle` 只包整窗口；斜率=每次调用延迟，截距=循环/测量开销。
 
+**标量对照链（`<fn>_scalar`）不复用上表的饱和轨道**：标量 clamp 一律用内联 `fmin.d`/`fmax.d` 实现无分支，map 收敛到钳位不活跃的工作点（exp x*=0.5、log x*=0.5867、pow x*=0.8/z*=1.3；sin/cos 仍为恒等映射），保证下一轮输入由本轮返回值经 FP 数据路径算出，而不是由可预测分支选中常数。exp 另有 `exp_scalar_sat` 对照，用同样的无分支 clamp 保留旧的饱和轨道（x*=1），用于区分“map 输出局部为常数”与“依赖链被绕过”。
+
 除依赖链延迟外，每个变体还有一个**独立调用吞吐**探针（entry 名后缀 `_tput`）：窗口内 4 个 loop-invariant 输入向量放在 4 组寄存器，每次迭代连续发 4 个互不依赖的调用，结果只进 4 条独立累加链（不回喂下一次调用）。`LAT` 行的 `calls=4*K`，`latency_parse.py` 按 `calls` 拟合，因此两种模式都输出 cycle/call。
 
 ## 4. 校验
 - 功能：同库标量 `libm` 结果作参考，逐元素 ≤2 ULP；失败即判该变体 fail，不可静默跳过。
   实现在 `latency_driver.c` 的 `LAT_ORACLE_SCALAR`：窗口外对同一冻结输入调用标量 `exp/log/sin/cos/pow`，把输出位模式按有序编码比较，`>LAT_SCALAR_ULP`（默认 2）记 `LAT_ERROR`。atan/acos 继续用冻结 MPFR 头（`LAT_DATA_HEADER`）。
-- 标量对照链：每个函数还有一个 `<fn>_scalar` 探针，标量 libm 调用 + 同一闭环 map，斜率给出标量库的 cycle/call 基线。
-- 构建审计：objdump 检查调用点/map/回边/空函数体，依赖被优化掉即 `AUDIT_FAILED`。
+- 标量对照链：每个函数还有一个 `<fn>_scalar` 探针，标量 libm 调用 + 无分支闭环 map，斜率给出标量库的 cycle/call 基线；exp 的饱和工作点另由 `exp_scalar_sat` 覆盖。注意 pow 的迭代变量在循环内溢出到栈（store→load），这条 map 依赖经过栈槽，仍无分支。
+- 构建审计：objdump 检查调用点/map/回边/空函数体；标量 entry 还要求 K 循环内恰好一次真调用、除回边外无条件分支、且下一次调用的 fa0/fa1 由上次返回值的 FP 数据流（含栈槽 store→load）污染，依赖被优化掉或分支选常数即 `AUDIT_FAILED`。
 - 门禁：无 cause=2/BAD TRAP、`LAT_END status=ok`、控制链（nop/空调用/map）校准通过；依赖链 R²≥0.999（斜率可分辨时）。
 
 ## 5. 操作步骤（以 exp 为例）
