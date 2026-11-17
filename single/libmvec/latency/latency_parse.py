@@ -137,12 +137,18 @@ def linfit(xs, ys):
 
 
 def aggregate(windows, phase):
-    """Group steady windows: (entry, k) -> list of cycles."""
+    """Group steady windows: (entry, k) -> list of (cycles, calls).
+
+    Latency probes retire k calls per window and throughput probes retire 4*k;
+    the call count travels with the sample so the fit below can use it as the
+    x axis and both modes report cycles per call.
+    """
     groups = {}
     for row in windows:
         if phase != "all" and row["phase"] != phase:
             continue
-        groups.setdefault((row["entry"], row["k"]), []).append(row["cycles"])
+        groups.setdefault((row["entry"], row["k"]), []).append(
+            (row["cycles"], row["calls"]))
     return groups
 
 
@@ -220,11 +226,14 @@ def main(argv=None):
 
     groups = aggregate(windows, args.phase)
     window_rows = []
-    for (entry, k), cycles in sorted(groups.items()):
+    for (entry, k), samples in sorted(groups.items()):
+        cycles = [c for c, _ in samples]
+        call_counts = [n for _, n in samples if n > 0]
         med = median(cycles)
         sd = stdev(cycles)
         window_rows.append({
             "entry": entry, "k": k, "n": len(cycles),
+            "calls": int(median(call_counts)) if call_counts else 0,
             "median_cycles": med, "mean_cycles": mean(cycles),
             "stdev_cycles": sd, "cv": (sd / mean(cycles)) if mean(cycles) else 0.0,
             "rcv": robust_cv(cycles),
@@ -251,22 +260,24 @@ def main(argv=None):
 
     fit_rows = []
     for entry in sorted({row["entry"] for row in window_rows}):
-        pts = [(row["k"], row["median_cycles"]) for row in window_rows
-               if row["entry"] == entry]
+        pts = [(row["k"], row["calls"], row["median_cycles"])
+               for row in window_rows if row["entry"] == entry]
         pts.sort()
         # K = 0 measures an empty window (no loop, no chain) and is a different
         # configuration: it is reported as an independent overhead point, not
-        # used to anchor the chain-bearing fit.
-        fit_pts = [(k, y) for k, y in pts if k > 0]
-        k0 = next((y for k, y in pts if k == 0), float("nan"))
-        xs = [k for k, _ in fit_pts]
+        # used to anchor the chain-bearing fit.  The slope is fit against the
+        # number of calls (k for latency, 4*k for throughput), so the column is
+        # cycles per call in both modes.
+        fit_pts = [(c, y) for k, c, y in pts if c > 0]
+        k0 = next((y for k, c, y in pts if k == 0), float("nan"))
+        xs = [c for c, _ in fit_pts]
         ys = [y for _, y in fit_pts]
         slope, intercept, r2 = linfit(xs, ys)
-        _, _, r2_all = linfit([k for k, _ in pts], [y for _, y in pts])
+        _, _, r2_all = linfit([c for _, c, _ in pts], [y for _, _, y in pts])
         max_rel = 0.0
         max_abs = 0.0
-        for k, y in fit_pts:
-            fitted = slope * k + intercept
+        for x, y in fit_pts:
+            fitted = slope * x + intercept
             resid = abs(y - fitted)
             max_abs = max(max_abs, resid)
             if fitted > 0:
@@ -282,8 +293,12 @@ def main(argv=None):
         fit_rows.append({
             "entry": entry,
             "n_k": len(pts),
-            "k_min": min(xs),
-            "k_max": max(xs),
+            "k_min": min(r["k"] for r in window_rows
+                         if r["entry"] == entry and r["calls"] > 0),
+            "k_max": max(r["k"] for r in window_rows
+                         if r["entry"] == entry and r["calls"] > 0),
+            "calls_min": min(xs),
+            "calls_max": max(xs),
             "slope_cycles_per_call": slope,
             "intercept_cycles": intercept,
             "r2": r2,

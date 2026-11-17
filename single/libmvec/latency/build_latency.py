@@ -63,7 +63,47 @@ DEFAULT_DATA_DIR = (
     SHARE / "experiments" / "2026-11-15-2244-libmvec-expand" / "inputs" / "perf"
 )
 
-# group -> (driver TU tag, frozen header, entries)
+# group -> (driver TU tag, frozen header, scalar libm oracle, entries)
+#
+# The five new families share one shape: 8 ABI variants (fixed/VLMAX x
+# unmasked/masked, m1/m2) in latency mode, the same 8 in independent-call
+# throughput mode, plus one scalar libm control chain.  exp/log/sin/cos/pow
+# check against the scalar libm of the same archive, so they need no frozen
+# MPFR header (atan/acos/atan2/log10 still use theirs).
+FAMILIES = {
+    "exp": dict(scalar="exp", binary=False, vfp_lat=3),
+    "log": dict(scalar="log", binary=False, vfp_lat=2),
+    "sin": dict(scalar="sin", binary=False, vfp_lat=0),
+    "cos": dict(scalar="cos", binary=False, vfp_lat=0),
+    "pow": dict(scalar="pow", binary=True, vfp_lat=3),
+}
+
+# ABI variant suffix -> mangled symbol template.  {mid} is 'v' for the binary
+# (pow) entries and empty otherwise; {fn} is the function name.  Fixed-size and
+# VLMAX unmasked variants both take one vector; masked variants take the
+# all-active predicate first (m1: vbool64_t, m2: vbool32_t).
+ABI_VARIANTS = [
+    ("m1_N2", "_ZGV1N2v{mid}_{fn}"),
+    ("m1_Nx", "_ZGV1Nxv{mid}_{fn}"),
+    ("m1_M2", "_ZGV1M2v{mid}_{fn}"),
+    ("m1_Mx", "_ZGV1Mxv{mid}_{fn}"),
+    ("m2_N4", "_ZGV2N4v{mid}_{fn}"),
+    ("m2_Nx", "_ZGV2Nxv{mid}_{fn}"),
+    ("m2_M4", "_ZGV2M4v{mid}_{fn}"),
+    ("m2_Mx", "_ZGV2Mxv{mid}_{fn}"),
+]
+
+
+def family_entries(fn):
+    """8 latency variants + the same 8 in throughput mode + scalar control."""
+    entries = []
+    for suffix, _ in ABI_VARIANTS:
+        entries.append(f"{fn}_{suffix}")
+        entries.append(f"{fn}_{suffix}_tput")
+    entries.append(f"{fn}_scalar")
+    return entries
+
+
 GROUPS = {
     "calib": dict(header=None, entries=[
         "nop_addi", "nop_addi64", "noop_m1", "noop_m2", "noop_map_m1",
@@ -74,6 +114,11 @@ GROUPS = {
     "acos_nx": dict(header="acos.h", entries=["acos_m1_Nx", "acos_m2_Nx"]),
     "acos_masked": dict(header="acos.h", entries=["acos_m1_M2", "acos_m2_M4"]),
 }
+for _fn, _meta in FAMILIES.items():
+    GROUPS[_fn] = dict(header=None, scalar=_meta["scalar"],
+                       binary=_meta["binary"],
+                       entries=family_entries(_fn))
+
 
 # probe table symbol -> probe function symbol (as emitted by latency_driver.c)
 PROBE_FUNCS = {
@@ -94,6 +139,9 @@ PROBE_FUNCS = {
     "acos_m1_M2": "probe_acos_m1_M2",
     "acos_m2_M4": "probe_acos_m2_M4",
 }
+for _fn in FAMILIES:
+    for _entry in GROUPS[_fn]["entries"]:
+        PROBE_FUNCS[_entry] = "probe_" + _entry
 
 # Audit expectation per entry: expected callee (None = no call), minimum number
 # of vector FP arithmetic instructions in the window, loop back-edge required.
@@ -123,9 +171,22 @@ AUDIT = {
     "acos_m1_M2": dict(callee="_ZGV1M2v_acos", vfp_min=2, loop=True),
     "acos_m2_M4": dict(callee="_ZGV2M4v_acos", vfp_min=2, loop=True),
 }
+for _fn, _meta in FAMILIES.items():
+    _mid = "v" if _meta["binary"] else ""
+    for _suffix, _tmpl in ABI_VARIANTS:
+        _sym = _tmpl.format(mid=_mid, fn=_fn)
+        _lat = f"{_fn}_{_suffix}"
+        AUDIT[_lat] = dict(callee=_sym, vfp_min=_meta["vfp_lat"], loop=True)
+        AUDIT[_lat + "_tput"] = dict(
+            callee=_sym, vfp_min=0, loop=True,
+            note="4 independent loop-invariant calls per step, no data dependency")
+    AUDIT[f"{_fn}_scalar"] = dict(
+        callee=None, vfp_min=0, loop=True,
+        note="scalar libm control chain")
 
 VFP_MNEMONICS = ("vfmul", "vfadd", "vfsub", "vfmacc", "vfmadd", "vfnmacc",
-                 "vfnmadd", "vfmsac", "vfmsub", "vfrsub", "vfdiv", "vfsqrt")
+                 "vfnmadd", "vfmsac", "vfmsub", "vfrsub", "vfdiv", "vfsqrt",
+                 "vfmin", "vfmax", "vfmerge")
 
 NOOP_SYMBOLS = ["latency_noop_m1", "latency_noop_m2",
                 "latency_noop_mask_m2", "latency_noop_mask_m4"]
@@ -492,6 +553,11 @@ def main(argv=None):
         hdr = GROUPS[g]["header"]
         if hdr:
             extra += [f'-DLAT_DATA_HEADER="{hdr}"', "-I", str(data_dir)]
+        elif GROUPS[g].get("scalar"):
+            extra += ["-DLAT_SCALAR_ORACLE=1",
+                      f"-DLAT_SCALAR_FN={GROUPS[g]['scalar']}"]
+            if GROUPS[g].get("binary"):
+                extra += [f"-DLAT_SCALAR_FN2={GROUPS[g]['scalar']}"]
         compile_tu(g, HERE / "latency_driver.c", extra,
                    [f"-DLAT_GROUP_{g.upper()}"])
     main_obj = compile_tu("main", HERE / "latency_main.c", defs_knobs,
@@ -554,16 +620,21 @@ def main(argv=None):
     nm_all = subprocess.run([str(nm), "--defined-only", str(elf)],
                             capture_output=True, text=True).stdout
     (outdir / "elf-symbols.txt").write_text(nm_all)
-    for sym in ["_ZGV1Nxv_atan", "_ZGV2Nxv_atan", "_ZGV1Nxv_acos",
-                "_ZGV2Nxv_acos", "_ZGV1M2v_acos", "_ZGV2M4v_acos"]:
+    for entry in [e for g in groups for e in GROUPS[g]["entries"]]:
+        sym = AUDIT.get(entry, {}).get("callee")
+        if not sym or not sym.startswith("_ZGV"):
+            continue
         if sym in nm_all:
             audit_lines.append(f"ok symbol {sym}")
+        else:
+            audit_failed.append(f"{entry}: {sym} missing from the linked image")
     link_map = (outdir / "link.map").read_text(errors="replace")
     members = sorted({m.split("(")[-1].rstrip(")")
                       for m in link_map.split()
                       if "libmvec.a(" in m})
     audit_lines.append("libmvec members pulled: " + (", ".join(members) or "none"))
-    needs_libmvec = any(GROUPS[g]["header"] for g in groups)
+    needs_libmvec = any(GROUPS[g]["header"] or GROUPS[g].get("scalar")
+                       for g in groups)
     if needs_libmvec and not members:
         audit_failed.append("no libmvec.a member pulled; -lm did not reach libmvec")
     if not needs_libmvec and members:

@@ -42,17 +42,98 @@
 #include LAT_DATA_HEADER
 static const uint64_t *const lat_input = input_bits;
 #define LAT_HAVE_ORACLE 1
+#define LAT_ORACLE_HEADER 1
+#elif defined(LAT_SCALAR_ORACLE)
+/* Scalar-libm oracle: the reference is the scalar routine of the very same
+ * libm linked into this image, evaluated outside the timed window.  Inputs are
+ * frozen here (2 lanes are read for m1, 4 for m2, and the four throughput
+ * streams use offsets 0..3 so every lane stays inside the 8-entry corpus).
+ * exp/log/pow need a domain near (0, 2]; sin/cos also cover reduction inputs. */
+#define LAT_HAVE_ORACLE 1
+#define LAT_ORACLE_SCALAR 1
+#if defined(LAT_GROUP_EXP)
+static const uint64_t lat_scalar_input[8] = {
+  0x3fe0000000000000ULL,	/*  0.5  */
+  0x3ff8000000000000ULL,	/*  1.5  */
+  0xbfe8000000000000ULL,	/* -0.75 */
+  0x4000000000000000ULL,	/*  2.0  */
+  0xbff8000000000000ULL,	/* -1.5  */
+  0x3fb999999999999aULL,	/*  0.1  */
+  0x3ff4000000000000ULL,	/*  1.25 */
+  0xc000000000000000ULL,	/* -2.0  */
+};
+#elif defined(LAT_GROUP_LOG)
+static const uint64_t lat_scalar_input[8] = {
+  0x3fb999999999999aULL,	/* 0.1  */
+  0x3fe0000000000000ULL,	/* 0.5  */
+  0x3ff0000000000000ULL,	/* 1.0  */
+  0x4000000000000000ULL,	/* 2.0  */
+  0x4014000000000000ULL,	/* 5.0  */
+  0x3fd0000000000000ULL,	/* 0.25 */
+  0x4020000000000000ULL,	/* 8.0  */
+  0x3fe8000000000000ULL,	/* 0.75 */
+};
+#elif defined(LAT_GROUP_SIN) || defined(LAT_GROUP_COS)
+static const uint64_t lat_scalar_input[8] = {
+  0xc004000000000000ULL,	/* -2.5  */
+  0xbfe0000000000000ULL,	/* -0.5  */
+  0x3fd0000000000000ULL,	/*  0.25 */
+  0x3ff8000000000000ULL,	/*  1.5  */
+  0x4008000000000000ULL,	/*  3.0  */
+  0xbff4000000000000ULL,	/* -1.25 */
+  0x3fe8000000000000ULL,	/*  0.75 */
+  0x4000000000000000ULL,	/*  2.0  */
+};
+#elif defined(LAT_GROUP_POW)
+static const uint64_t lat_scalar_input[8] = {
+  0x3fe0000000000000ULL,	/* 0.5  */
+  0x3ff8000000000000ULL,	/* 1.5  */
+  0x3fe999999999999aULL,	/* 0.8  */
+  0x4000000000000000ULL,	/* 2.0  */
+  0x3fd0000000000000ULL,	/* 0.25 */
+  0x3ff0000000000000ULL,	/* 1.0  */
+  0x3fe3333333333333ULL,	/* 0.6  */
+  0x3ffccccccccccccdULL,	/* 1.8  */
+};
+static const uint64_t lat_scalar_input2[8] = {
+  0xbff0000000000000ULL,	/* -1.0  */
+  0x4000000000000000ULL,	/*  2.0  */
+  0x3fe0000000000000ULL,	/*  0.5  */
+  0xc000000000000000ULL,	/* -2.0  */
+  0x4008000000000000ULL,	/*  3.0  */
+  0x3fd0000000000000ULL,	/*  0.25 */
+  0xbfe0000000000000ULL,	/* -0.5  */
+  0x3ff0000000000000ULL,	/*  1.0  */
+};
+#endif
+static const uint64_t *const lat_input = lat_scalar_input;
+#if defined(LAT_GROUP_POW)
+static const uint64_t *const lat_input2 = lat_scalar_input2;
+#endif
 #else
 /* Calibration probes have no oracle.  Values sit inside [-1, 1] so the maps
  * stay in domain; both chains converge to the same fixed point regardless. */
-static const uint64_t lat_input_local[4] = {
+static const uint64_t lat_input_local[8] = {
   0x3fd0000000000000ULL,	/*  0.25  */
   0xbfe0000000000000ULL,	/* -0.5   */
   0x3fe8000000000000ULL,	/*  0.75  */
   0xbfc0000000000000ULL,	/* -0.125 */
+  0x3fe0000000000000ULL,	/*  0.5   */
+  0xbfd0000000000000ULL,	/* -0.25  */
+  0x3ff0000000000000ULL,	/*  1.0   */
+  0xbfe8000000000000ULL,	/* -0.75  */
 };
 static const uint64_t *const lat_input = lat_input_local;
 #define LAT_HAVE_ORACLE 0
+#define LAT_ORACLE_NONE 1
+#endif
+#include <math.h>
+
+#ifndef LAT_SCALAR_FN
+#define LAT_SCALAR_FN exp
+#endif
+#ifndef LAT_SCALAR_FN2
+#define LAT_SCALAR_FN2 pow
 #endif
 
 #ifndef LAT_SERIAL
@@ -68,6 +149,16 @@ extern vfloat64m1_t _ZGV1Nxv_acos (vfloat64m1_t) LAT_RVV_CC;
 extern vfloat64m2_t _ZGV2Nxv_acos (vfloat64m2_t) LAT_RVV_CC;
 extern vfloat64m1_t _ZGV1M2v_acos (vbool64_t, vfloat64m1_t) LAT_RVV_CC;
 extern vfloat64m2_t _ZGV2M4v_acos (vbool32_t, vfloat64m2_t) LAT_RVV_CC;
+
+/* exp family: 8 ABI variants (fixed/VLMAX x unmasked/masked, m1/m2). */
+extern vfloat64m1_t _ZGV1N2v_exp (vfloat64m1_t) LAT_RVV_CC;
+extern vfloat64m1_t _ZGV1Nxv_exp (vfloat64m1_t) LAT_RVV_CC;
+extern vfloat64m1_t _ZGV1M2v_exp (vbool64_t, vfloat64m1_t) LAT_RVV_CC;
+extern vfloat64m1_t _ZGV1Mxv_exp (vbool64_t, vfloat64m1_t) LAT_RVV_CC;
+extern vfloat64m2_t _ZGV2N4v_exp (vfloat64m2_t) LAT_RVV_CC;
+extern vfloat64m2_t _ZGV2Nxv_exp (vfloat64m2_t) LAT_RVV_CC;
+extern vfloat64m2_t _ZGV2M4v_exp (vbool32_t, vfloat64m2_t) LAT_RVV_CC;
+extern vfloat64m2_t _ZGV2Mxv_exp (vbool32_t, vfloat64m2_t) LAT_RVV_CC;
 
 /* ---- empty ABI controls (latency_noop.c) ---- */
 extern vfloat64m1_t latency_noop_m1 (vfloat64m1_t) LAT_RVV_CC;
@@ -114,6 +205,28 @@ lat_bits (const double *p)
   return b;
 }
 
+static inline double
+lat_double (uint64_t b)
+{
+  double d;
+  __builtin_memcpy (&d, &b, sizeof d);
+  return d;
+}
+
+/* Zero row for the throughput accumulators (loaded with the group's own LMUL
+ * load, so the macro does not need the vector type name). */
+static const double lat_zero[8] = { 0.0, 0.0, 0.0, 0.0,
+				    0.0, 0.0, 0.0, 0.0 };
+
+/* Scalar counterparts of the vector maps, used by the scalar libm control
+ * chain.  -ffp-contract=off keeps them instruction-for-instruction equal to
+ * the vector maps (no fused multiply-add). */
+static inline double
+lat_scalar_clamp (double v, double lo, double hi)
+{
+  return v < lo ? lo : (v > hi ? hi : v);
+}
+
 /* Total order on IEEE-754 bit patterns so a one-bit difference stays one. */
 static inline uint64_t
 lat_ordered (uint64_t b)
@@ -138,6 +251,7 @@ lat_fnvbuf (const double *p, unsigned n)
 }
 
 #if LAT_HAVE_ORACLE
+#if LAT_ORACLE_HEADER
 static void
 lat_check_bits (const double *out, unsigned n, const uint64_t *want,
 		const char *entry)
@@ -157,6 +271,42 @@ lat_check_bits (const double *out, unsigned n, const uint64_t *want,
     }
 }
 #define LAT_CHECK(out, n, entry) lat_check_bits ((out), (n), reference_bits, (entry))
+#else /* LAT_ORACLE_SCALAR */
+/* Compare each vector lane with the scalar libm routine of the same library on
+ * the same frozen input.  The distance is in ordered IEEE-754 steps, i.e. ULP,
+ * and >LAT_SCALAR_ULP is a hard failure: a bad ABI, a broken mask, or a wrong
+ * chain shows up as failed>0, never as a plausible cycle count. */
+#ifndef LAT_SCALAR_ULP
+#define LAT_SCALAR_ULP 2
+#endif
+static void
+lat_check_scalar (const double *out, unsigned n, const char *entry)
+{
+  for (unsigned i = 0; i < n; ++i)
+    {
+      ++lat_checks;
+      uint64_t got = lat_bits (out + i);
+      double want_d;
+#if defined(LAT_GROUP_POW)
+      want_d = LAT_SCALAR_FN2 (lat_double (lat_input[i]),
+			       lat_double (lat_input2[i]));
+#else
+      want_d = LAT_SCALAR_FN (lat_double (lat_input[i]));
+#endif
+      uint64_t want = lat_bits (&want_d);
+      uint64_t a = lat_ordered (got), b = lat_ordered (want);
+      uint64_t d = a > b ? a - b : b - a;
+      if (d > LAT_SCALAR_ULP)
+	{
+	  if (lat_failed++ < 8)
+	    printf ("LAT_ERROR,entry=%s,index=%u,got=%llx,want=%llx,ulp=%llu\n",
+		    entry, i, (unsigned long long) got,
+		    (unsigned long long) want, (unsigned long long) d);
+	}
+    }
+}
+#define LAT_CHECK(out, n, entry) lat_check_scalar ((out), (n), (entry))
+#endif
 #else
 #define LAT_CHECK(out, n, entry) ((void) 0)
 #endif
@@ -246,6 +396,321 @@ probe_##TAG (unsigned k, unsigned round, lat_window *w)			\
   }									\
   w->checksum = lat_fnvbuf (out, (LANES));				\
   LAT_CHECK (out, (LANES), NAME);					\
+}
+
+/* ---- independent-call throughput probes ---------------------------------
+ *
+ * Latency mode chains map(entry(x)) so the next call waits for the previous
+ * result.  Throughput mode does the opposite: four loop-invariant input
+ * vectors sit in four register groups and each iteration issues the four calls
+ * back to back.  There is no data dependency between successive calls (the
+ * arguments never change); the results only feed four independent accumulator
+ * chains, which keeps the calls alive without feeding them back.  Calls per
+ * window = 4*K and the host divides the window by that count. */
+#define LAT_TPUT_STREAMS 4
+
+#define LAT_DEFINE_TPUT_PROBE(TAG, NAME, LANES, VT, LOAD, STORE, CALL)	\
+static void								\
+probe_##TAG (unsigned k, unsigned round, lat_window *w)			\
+{									\
+  const size_t vl = (LANES);						\
+  static double out[8] __attribute__((aligned(64)));			\
+  VT x0, x1, x2, x3, a0, a1, a2, a3, y;					\
+  (void) round;								\
+  x0 = LOAD ((const double *)(const void *) lat_input + 0, vl);		\
+  x1 = LOAD ((const double *)(const void *) lat_input + 1, vl);		\
+  x2 = LOAD ((const double *)(const void *) lat_input + 2, vl);		\
+  x3 = LOAD ((const double *)(const void *) lat_input + 3, vl);		\
+  a0 = a1 = a2 = a3 = LOAD (lat_zero, vl);				\
+  w->begin = LAT_WIN_BEGIN ();						\
+  for (unsigned i = 0; i < k; ++i)					\
+    {									\
+      y = CALL (x0); a0 = __riscv_vfadd (a0, y, vl);			\
+      y = CALL (x1); a1 = __riscv_vfadd (a1, y, vl);			\
+      y = CALL (x2); a2 = __riscv_vfadd (a2, y, vl);			\
+      y = CALL (x3); a3 = __riscv_vfadd (a3, y, vl);			\
+    }									\
+  w->cycles = LAT_WIN_END () - w->begin;				\
+  w->calls = LAT_TPUT_STREAMS * k;					\
+  a0 = __riscv_vfadd (__riscv_vfadd (a0, a1, vl),			\
+		      __riscv_vfadd (a2, a3, vl), vl);			\
+  STORE (out, a0, vl);							\
+  w->chain_checksum = lat_fnvbuf (out, (LANES));			\
+  w->checksum = w->chain_checksum;					\
+  LAT_CHECK (out, (LANES), NAME);					\
+}
+
+#define LAT_DEFINE_MASKED_TPUT_PROBE(TAG, NAME, LANES, VT, MASKVT, MSET,	\
+				     LOAD, STORE, CALL)			\
+static void								\
+probe_##TAG (unsigned k, unsigned round, lat_window *w)			\
+{									\
+  const size_t vl = (LANES);						\
+  MASKVT lat_mask = MSET ((int32_t) (LANES));				\
+  static double out[8] __attribute__((aligned(64)));			\
+  VT x0, x1, x2, x3, a0, a1, a2, a3, y;					\
+  (void) round;								\
+  x0 = LOAD ((const double *)(const void *) lat_input + 0, vl);		\
+  x1 = LOAD ((const double *)(const void *) lat_input + 1, vl);		\
+  x2 = LOAD ((const double *)(const void *) lat_input + 2, vl);		\
+  x3 = LOAD ((const double *)(const void *) lat_input + 3, vl);		\
+  a0 = a1 = a2 = a3 = LOAD (lat_zero, vl);				\
+  w->begin = LAT_WIN_BEGIN ();						\
+  for (unsigned i = 0; i < k; ++i)					\
+    {									\
+      y = CALL (x0); a0 = __riscv_vfadd (a0, y, vl);			\
+      y = CALL (x1); a1 = __riscv_vfadd (a1, y, vl);			\
+      y = CALL (x2); a2 = __riscv_vfadd (a2, y, vl);			\
+      y = CALL (x3); a3 = __riscv_vfadd (a3, y, vl);			\
+    }									\
+  w->cycles = LAT_WIN_END () - w->begin;				\
+  w->calls = LAT_TPUT_STREAMS * k;					\
+  a0 = __riscv_vfadd (__riscv_vfadd (a0, a1, vl),			\
+		      __riscv_vfadd (a2, a3, vl), vl);			\
+  STORE (out, a0, vl);							\
+  w->chain_checksum = lat_fnvbuf (out, (LANES));			\
+  w->checksum = w->chain_checksum;					\
+  LAT_CHECK (out, (LANES), NAME);					\
+}
+
+/* Binary (pow) chained map probe: both argument vectors are part of the
+ * closed loop.  The result feeds x, and z is re-derived from the new x. */
+#define LAT_DEFINE_BINARY_MAP_PROBE(TAG, NAME, LANES, VT, LOAD, STORE, MAPX,	\
+				    MAPZ, CALL)				\
+static void								\
+probe_##TAG (unsigned k, unsigned round, lat_window *w)			\
+{									\
+  const size_t vl = (LANES);						\
+  static double state[8] __attribute__((aligned(64)));			\
+  static double state2[8] __attribute__((aligned(64)));			\
+  static double out[8] __attribute__((aligned(64)));			\
+  VT x, z, r;								\
+  if (round == 0)							\
+    {									\
+      x = LOAD ((const double *)(const void *) lat_input, vl);		\
+      z = LOAD ((const double *)(const void *) lat_input2, vl);		\
+      for (unsigned i = 0; i < LAT_PRELUDE; ++i)			\
+	{								\
+	  r = CALL (x, z);						\
+	  x = MAPX (r, vl);						\
+	  z = MAPZ (x, vl);						\
+	}								\
+    }									\
+  else									\
+    {									\
+      x = LOAD ((const double *) state, vl);				\
+      z = LOAD ((const double *) state2, vl);				\
+    }									\
+  w->begin = LAT_WIN_BEGIN ();						\
+  for (unsigned i = 0; i < k; ++i)					\
+    {									\
+      r = CALL (x, z);							\
+      x = MAPX (r, vl);							\
+      z = MAPZ (x, vl);							\
+    }									\
+  w->cycles = LAT_WIN_END () - w->begin;				\
+  STORE (state, x, vl);							\
+  STORE (state2, z, vl);						\
+  w->chain_checksum = lat_fnvbuf (state, (LANES))			\
+    ^ (lat_fnvbuf (state2, (LANES)) * 1099511628211ULL);		\
+  {									\
+    VT rx = LOAD ((const double *)(const void *) lat_input, vl);	\
+    VT rz = LOAD ((const double *)(const void *) lat_input2, vl);	\
+    STORE (out, CALL (rx, rz), vl);					\
+  }									\
+  w->checksum = lat_fnvbuf (out, (LANES));				\
+  LAT_CHECK (out, (LANES), NAME);					\
+}
+
+#define LAT_DEFINE_BINARY_MASKED_MAP_PROBE(TAG, NAME, LANES, VT, MASKVT, MSET,	\
+					   LOAD, STORE, MAPX, MAPZ, CALL)	\
+static void								\
+probe_##TAG (unsigned k, unsigned round, lat_window *w)			\
+{									\
+  const size_t vl = (LANES);						\
+  MASKVT lat_mask = MSET ((int32_t) (LANES));				\
+  static double state[8] __attribute__((aligned(64)));			\
+  static double state2[8] __attribute__((aligned(64)));			\
+  static double out[8] __attribute__((aligned(64)));			\
+  VT x, z, r;								\
+  if (round == 0)							\
+    {									\
+      x = LOAD ((const double *)(const void *) lat_input, vl);		\
+      z = LOAD ((const double *)(const void *) lat_input2, vl);		\
+      for (unsigned i = 0; i < LAT_PRELUDE; ++i)			\
+	{								\
+	  r = CALL (x, z);						\
+	  x = MAPX (r, vl);						\
+	  z = MAPZ (x, vl);						\
+	}								\
+    }									\
+  else									\
+    {									\
+      x = LOAD ((const double *) state, vl);				\
+      z = LOAD ((const double *) state2, vl);				\
+    }									\
+  w->begin = LAT_WIN_BEGIN ();						\
+  for (unsigned i = 0; i < k; ++i)					\
+    {									\
+      r = CALL (x, z);							\
+      x = MAPX (r, vl);							\
+      z = MAPZ (x, vl);							\
+    }									\
+  w->cycles = LAT_WIN_END () - w->begin;				\
+  STORE (state, x, vl);							\
+  STORE (state2, z, vl);						\
+  w->chain_checksum = lat_fnvbuf (state, (LANES))			\
+    ^ (lat_fnvbuf (state2, (LANES)) * 1099511628211ULL);		\
+  {									\
+    VT rx = LOAD ((const double *)(const void *) lat_input, vl);	\
+    VT rz = LOAD ((const double *)(const void *) lat_input2, vl);	\
+    STORE (out, CALL (rx, rz), vl);					\
+  }									\
+  w->checksum = lat_fnvbuf (out, (LANES));				\
+  LAT_CHECK (out, (LANES), NAME);					\
+}
+
+/* Binary throughput probe: four independent (x,z) pairs, loop-invariant. */
+#define LAT_DEFINE_BINARY_TPUT_PROBE(TAG, NAME, LANES, VT, LOAD, STORE, CALL) \
+static void								\
+probe_##TAG (unsigned k, unsigned round, lat_window *w)			\
+{									\
+  const size_t vl = (LANES);						\
+  static double out[8] __attribute__((aligned(64)));			\
+  VT x0, x1, x2, x3, z0, z1, z2, z3, a0, a1, a2, a3, y;			\
+  (void) round;								\
+  x0 = LOAD ((const double *)(const void *) lat_input + 0, vl);		\
+  x1 = LOAD ((const double *)(const void *) lat_input + 1, vl);		\
+  x2 = LOAD ((const double *)(const void *) lat_input + 2, vl);		\
+  x3 = LOAD ((const double *)(const void *) lat_input + 3, vl);		\
+  z0 = LOAD ((const double *)(const void *) lat_input2 + 0, vl);	\
+  z1 = LOAD ((const double *)(const void *) lat_input2 + 1, vl);	\
+  z2 = LOAD ((const double *)(const void *) lat_input2 + 2, vl);	\
+  z3 = LOAD ((const double *)(const void *) lat_input2 + 3, vl);	\
+  a0 = a1 = a2 = a3 = LOAD (lat_zero, vl);				\
+  w->begin = LAT_WIN_BEGIN ();						\
+  for (unsigned i = 0; i < k; ++i)					\
+    {									\
+      y = CALL (x0, z0); a0 = __riscv_vfadd (a0, y, vl);		\
+      y = CALL (x1, z1); a1 = __riscv_vfadd (a1, y, vl);		\
+      y = CALL (x2, z2); a2 = __riscv_vfadd (a2, y, vl);		\
+      y = CALL (x3, z3); a3 = __riscv_vfadd (a3, y, vl);		\
+    }									\
+  w->cycles = LAT_WIN_END () - w->begin;				\
+  w->calls = LAT_TPUT_STREAMS * k;					\
+  a0 = __riscv_vfadd (__riscv_vfadd (a0, a1, vl),			\
+		      __riscv_vfadd (a2, a3, vl), vl);			\
+  STORE (out, a0, vl);							\
+  w->chain_checksum = lat_fnvbuf (out, (LANES));			\
+  w->checksum = w->chain_checksum;					\
+  LAT_CHECK (out, (LANES), NAME);					\
+}
+
+#define LAT_DEFINE_BINARY_MASKED_TPUT_PROBE(TAG, NAME, LANES, VT, MASKVT,	\
+					    MSET, LOAD, STORE, CALL)	\
+static void								\
+probe_##TAG (unsigned k, unsigned round, lat_window *w)			\
+{									\
+  const size_t vl = (LANES);						\
+  MASKVT lat_mask = MSET ((int32_t) (LANES));				\
+  static double out[8] __attribute__((aligned(64)));			\
+  VT x0, x1, x2, x3, z0, z1, z2, z3, a0, a1, a2, a3, y;			\
+  (void) round;								\
+  x0 = LOAD ((const double *)(const void *) lat_input + 0, vl);		\
+  x1 = LOAD ((const double *)(const void *) lat_input + 1, vl);		\
+  x2 = LOAD ((const double *)(const void *) lat_input + 2, vl);		\
+  x3 = LOAD ((const double *)(const void *) lat_input + 3, vl);		\
+  z0 = LOAD ((const double *)(const void *) lat_input2 + 0, vl);	\
+  z1 = LOAD ((const double *)(const void *) lat_input2 + 1, vl);	\
+  z2 = LOAD ((const double *)(const void *) lat_input2 + 2, vl);	\
+  z3 = LOAD ((const double *)(const void *) lat_input2 + 3, vl);	\
+  a0 = a1 = a2 = a3 = LOAD (lat_zero, vl);				\
+  w->begin = LAT_WIN_BEGIN ();						\
+  for (unsigned i = 0; i < k; ++i)					\
+    {									\
+      y = CALL (x0, z0); a0 = __riscv_vfadd (a0, y, vl);		\
+      y = CALL (x1, z1); a1 = __riscv_vfadd (a1, y, vl);		\
+      y = CALL (x2, z2); a2 = __riscv_vfadd (a2, y, vl);		\
+      y = CALL (x3, z3); a3 = __riscv_vfadd (a3, y, vl);		\
+    }									\
+  w->cycles = LAT_WIN_END () - w->begin;				\
+  w->calls = LAT_TPUT_STREAMS * k;					\
+  a0 = __riscv_vfadd (__riscv_vfadd (a0, a1, vl),			\
+		      __riscv_vfadd (a2, a3, vl), vl);			\
+  STORE (out, a0, vl);							\
+  w->chain_checksum = lat_fnvbuf (out, (LANES));			\
+  w->checksum = w->chain_checksum;					\
+  LAT_CHECK (out, (LANES), NAME);					\
+}
+
+/* Scalar libm control chain: the mapped scalar routine sits in the same K
+ * loop as the vector variants, so cycles/call is directly comparable. */
+#define LAT_DEFINE_SCALAR_MAP_PROBE(TAG, NAME, MAPF, CALLF)		\
+static void								\
+probe_##TAG (unsigned k, unsigned round, lat_window *w)			\
+{									\
+  static double state;							\
+  double x;								\
+  if (round == 0)							\
+    {									\
+      x = lat_double (lat_input[0]);					\
+      for (unsigned i = 0; i < LAT_PRELUDE; ++i)			\
+	x = MAPF (CALLF (x));						\
+    }									\
+  else									\
+    x = state;								\
+  w->begin = LAT_WIN_BEGIN ();						\
+  for (unsigned i = 0; i < k; ++i)					\
+    x = MAPF (CALLF (x));						\
+  w->cycles = LAT_WIN_END () - w->begin;				\
+  state = x;								\
+  w->chain_checksum = lat_bits (&state);				\
+  {									\
+    double out = CALLF (lat_double (lat_input[0]));			\
+    w->checksum = lat_bits (&out);					\
+    LAT_CHECK (&out, 1, NAME);						\
+  }									\
+}
+
+#define LAT_DEFINE_SCALAR_BINARY_MAP_PROBE(TAG, NAME, MAPF, MAPF2, CALLF) \
+static void								\
+probe_##TAG (unsigned k, unsigned round, lat_window *w)			\
+{									\
+  static double state, state2;						\
+  double x, z, y;							\
+  if (round == 0)							\
+    {									\
+      x = lat_double (lat_input[0]);					\
+      z = lat_double (lat_input2[0]);					\
+      for (unsigned i = 0; i < LAT_PRELUDE; ++i)			\
+	{								\
+	  y = CALLF (x, z);						\
+	  x = MAPF (y);							\
+	  z = MAPF2 (x);						\
+	}								\
+    }									\
+  else									\
+    {									\
+      x = state;							\
+      z = state2;							\
+    }									\
+  w->begin = LAT_WIN_BEGIN ();						\
+  for (unsigned i = 0; i < k; ++i)					\
+    {									\
+      y = CALLF (x, z);							\
+      x = MAPF (y);							\
+      z = MAPF2 (x);							\
+    }									\
+  w->cycles = LAT_WIN_END () - w->begin;				\
+  state = x;								\
+  state2 = z;								\
+  w->chain_checksum = lat_bits (&state) ^ (lat_bits (&state2) * 1099511628211ULL); \
+  {									\
+    double out = CALLF (lat_double (lat_input[0]),			\
+			lat_double (lat_input2[0]));			\
+    w->checksum = lat_bits (&out);					\
+    LAT_CHECK (&out, 1, NAME);						\
+  }									\
 }
 
 /* Map-only probe: two vector FP instructions per step, no call at all. */
@@ -485,3 +950,104 @@ static const lat_probe acos_masked_probes[] = {
 const lat_probe_group lat_group_acos_masked
   = {"acos_masked", acos_masked_probes, LAT_PROBE_COUNT (acos_masked_probes)};
 #endif /* LAT_GROUP_ACOS_MASKED */
+
+/* ------------------------------------------------------------------------
+ * exp: 8 ABI variants + 8 independent-call throughput probes + scalar libm
+ * control.  One binary per function (build_latency.py --groups exp).
+ * ------------------------------------------------------------------------ */
+#ifdef LAT_GROUP_EXP
+#if !LAT_HAVE_ORACLE || !LAT_ORACLE_SCALAR
+#error "LAT_GROUP_EXP needs -DLAT_SCALAR_ORACLE=1"
+#endif
+#define LAT_CALL_EXP_M1_M2(v) _ZGV1M2v_exp (lat_mask, (v))
+#define LAT_CALL_EXP_M1_MX(v) _ZGV1Mxv_exp (lat_mask, (v))
+#define LAT_CALL_EXP_M2_M4(v) _ZGV2M4v_exp (lat_mask, (v))
+#define LAT_CALL_EXP_M2_MX(v) _ZGV2Mxv_exp (lat_mask, (v))
+
+LAT_DEFINE_MAP_PROBE (exp_m1_N2, "exp_m1_N2", LAT_LANES_M1, vfloat64m1_t,
+		      __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
+		      lat_map_exp_m1, _ZGV1N2v_exp)
+LAT_DEFINE_MAP_PROBE (exp_m1_Nx, "exp_m1_Nx", LAT_LANES_M1, vfloat64m1_t,
+		      __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
+		      lat_map_exp_m1, _ZGV1Nxv_exp)
+LAT_DEFINE_MASKED_MAP_PROBE (exp_m1_M2, "exp_m1_M2", LAT_LANES_M1,
+			     vfloat64m1_t, vbool64_t, __riscv_vmset_m_b64,
+			     __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
+			     lat_map_exp_m1, LAT_CALL_EXP_M1_M2)
+LAT_DEFINE_MASKED_MAP_PROBE (exp_m1_Mx, "exp_m1_Mx", LAT_LANES_M1,
+			     vfloat64m1_t, vbool64_t, __riscv_vmset_m_b64,
+			     __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
+			     lat_map_exp_m1, LAT_CALL_EXP_M1_MX)
+LAT_DEFINE_MAP_PROBE (exp_m2_N4, "exp_m2_N4", LAT_LANES_M2, vfloat64m2_t,
+		      __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
+		      lat_map_exp_m2, _ZGV2N4v_exp)
+LAT_DEFINE_MAP_PROBE (exp_m2_Nx, "exp_m2_Nx", LAT_LANES_M2, vfloat64m2_t,
+		      __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
+		      lat_map_exp_m2, _ZGV2Nxv_exp)
+LAT_DEFINE_MASKED_MAP_PROBE (exp_m2_M4, "exp_m2_M4", LAT_LANES_M2,
+			     vfloat64m2_t, vbool32_t, __riscv_vmset_m_b32,
+			     __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
+			     lat_map_exp_m2, LAT_CALL_EXP_M2_M4)
+LAT_DEFINE_MASKED_MAP_PROBE (exp_m2_Mx, "exp_m2_Mx", LAT_LANES_M2,
+			     vfloat64m2_t, vbool32_t, __riscv_vmset_m_b32,
+			     __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
+			     lat_map_exp_m2, LAT_CALL_EXP_M2_MX)
+
+LAT_DEFINE_TPUT_PROBE (exp_m1_N2_tput, "exp_m1_N2_tput", LAT_LANES_M1,
+		       vfloat64m1_t, __riscv_vle64_v_f64m1,
+		       __riscv_vse64_v_f64m1, _ZGV1N2v_exp)
+LAT_DEFINE_TPUT_PROBE (exp_m1_Nx_tput, "exp_m1_Nx_tput", LAT_LANES_M1,
+		       vfloat64m1_t, __riscv_vle64_v_f64m1,
+		       __riscv_vse64_v_f64m1, _ZGV1Nxv_exp)
+LAT_DEFINE_MASKED_TPUT_PROBE (exp_m1_M2_tput, "exp_m1_M2_tput", LAT_LANES_M1,
+			      vfloat64m1_t, vbool64_t, __riscv_vmset_m_b64,
+			      __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
+			      LAT_CALL_EXP_M1_M2)
+LAT_DEFINE_MASKED_TPUT_PROBE (exp_m1_Mx_tput, "exp_m1_Mx_tput", LAT_LANES_M1,
+			      vfloat64m1_t, vbool64_t, __riscv_vmset_m_b64,
+			      __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
+			      LAT_CALL_EXP_M1_MX)
+LAT_DEFINE_TPUT_PROBE (exp_m2_N4_tput, "exp_m2_N4_tput", LAT_LANES_M2,
+		       vfloat64m2_t, __riscv_vle64_v_f64m2,
+		       __riscv_vse64_v_f64m2, _ZGV2N4v_exp)
+LAT_DEFINE_TPUT_PROBE (exp_m2_Nx_tput, "exp_m2_Nx_tput", LAT_LANES_M2,
+		       vfloat64m2_t, __riscv_vle64_v_f64m2,
+		       __riscv_vse64_v_f64m2, _ZGV2Nxv_exp)
+LAT_DEFINE_MASKED_TPUT_PROBE (exp_m2_M4_tput, "exp_m2_M4_tput", LAT_LANES_M2,
+			      vfloat64m2_t, vbool32_t, __riscv_vmset_m_b32,
+			      __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
+			      LAT_CALL_EXP_M2_M4)
+LAT_DEFINE_MASKED_TPUT_PROBE (exp_m2_Mx_tput, "exp_m2_Mx_tput", LAT_LANES_M2,
+			      vfloat64m2_t, vbool32_t, __riscv_vmset_m_b32,
+			      __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
+			      LAT_CALL_EXP_M2_MX)
+
+static double
+lat_scalar_map_exp (double y)
+{
+  return lat_scalar_clamp (y, 0.1, 2.0) - 1.0;
+}
+LAT_DEFINE_SCALAR_MAP_PROBE (exp_scalar, "exp_scalar", lat_scalar_map_exp, exp)
+
+static const lat_probe exp_probes[] = {
+  {"exp_m1_N2", probe_exp_m1_N2},
+  {"exp_m1_Nx", probe_exp_m1_Nx},
+  {"exp_m1_M2", probe_exp_m1_M2},
+  {"exp_m1_Mx", probe_exp_m1_Mx},
+  {"exp_m2_N4", probe_exp_m2_N4},
+  {"exp_m2_Nx", probe_exp_m2_Nx},
+  {"exp_m2_M4", probe_exp_m2_M4},
+  {"exp_m2_Mx", probe_exp_m2_Mx},
+  {"exp_m1_N2_tput", probe_exp_m1_N2_tput},
+  {"exp_m1_Nx_tput", probe_exp_m1_Nx_tput},
+  {"exp_m1_M2_tput", probe_exp_m1_M2_tput},
+  {"exp_m1_Mx_tput", probe_exp_m1_Mx_tput},
+  {"exp_m2_N4_tput", probe_exp_m2_N4_tput},
+  {"exp_m2_Nx_tput", probe_exp_m2_Nx_tput},
+  {"exp_m2_M4_tput", probe_exp_m2_M4_tput},
+  {"exp_m2_Mx_tput", probe_exp_m2_Mx_tput},
+  {"exp_scalar", probe_exp_scalar},
+};
+const lat_probe_group lat_group_exp
+  = {"exp", exp_probes, LAT_PROBE_COUNT (exp_probes)};
+#endif /* LAT_GROUP_EXP */

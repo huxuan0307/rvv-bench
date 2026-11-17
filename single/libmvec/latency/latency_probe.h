@@ -58,6 +58,10 @@ typedef struct {
   uint64_t cycles;
   uint64_t checksum;
   uint64_t chain_checksum;
+  /* Calls retired inside the timed window: k for the dependency chain, 4*k
+   * for the four-stream throughput probe.  The host fits cycles against this
+   * count, so both modes report cycles per call in the same column. */
+  unsigned calls;
 } lat_window;
 
 typedef void (*lat_probe_fn)(unsigned k, unsigned round, lat_window *w);
@@ -81,6 +85,11 @@ extern const lat_probe_group lat_group_calib;
 extern const lat_probe_group lat_group_atan;
 extern const lat_probe_group lat_group_acos_nx;
 extern const lat_probe_group lat_group_acos_masked;
+extern const lat_probe_group lat_group_exp;
+extern const lat_probe_group lat_group_log;
+extern const lat_probe_group lat_group_sin;
+extern const lat_probe_group lat_group_cos;
+extern const lat_probe_group lat_group_pow;
 
 /* Oracle counters, reset by latency_main.c before every (entry, K) block. */
 void lat_reset_counters(void);

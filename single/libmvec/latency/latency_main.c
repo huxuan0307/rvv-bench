@@ -153,6 +153,21 @@ lat_print_groups (void)
 #ifdef LAT_GROUP_ACOS_MASKED
   LAT_PRINT_GROUP ("acos_masked");
 #endif
+#ifdef LAT_GROUP_EXP
+  LAT_PRINT_GROUP ("exp");
+#endif
+#ifdef LAT_GROUP_LOG
+  LAT_PRINT_GROUP ("log");
+#endif
+#ifdef LAT_GROUP_SIN
+  LAT_PRINT_GROUP ("sin");
+#endif
+#ifdef LAT_GROUP_COS
+  LAT_PRINT_GROUP ("cos");
+#endif
+#ifdef LAT_GROUP_POW
+  LAT_PRINT_GROUP ("pow");
+#endif
 #undef LAT_PRINT_GROUP
   if (first)
     printf ("none");
@@ -183,6 +198,21 @@ lat_print_entries (void)
 #ifdef LAT_GROUP_ACOS_MASKED
   LAT_PRINT_ENTRIES (lat_group_acos_masked);
 #endif
+#ifdef LAT_GROUP_EXP
+  LAT_PRINT_ENTRIES (lat_group_exp);
+#endif
+#ifdef LAT_GROUP_LOG
+  LAT_PRINT_ENTRIES (lat_group_log);
+#endif
+#ifdef LAT_GROUP_SIN
+  LAT_PRINT_ENTRIES (lat_group_sin);
+#endif
+#ifdef LAT_GROUP_COS
+  LAT_PRINT_ENTRIES (lat_group_cos);
+#endif
+#ifdef LAT_GROUP_POW
+  LAT_PRINT_ENTRIES (lat_group_pow);
+#endif
 #undef LAT_PRINT_ENTRIES
   if (first)
     printf ("none");
@@ -211,6 +241,9 @@ lat_run_group (const lat_probe_group *g, unsigned *checks, unsigned *failed)
 	      w.cycles = 0;
 	      w.checksum = 0;
 	      w.chain_checksum = 0;
+	      /* Default: one chained call per K step.  The throughput probes
+	       * overwrite this with 4*K (four independent streams). */
+	      w.calls = k;
 	      p->run (k, r, &w);
 	      lat_push (p->name, k, r, &w);
 	    }
@@ -266,7 +299,7 @@ lat_print_records (void)
       const lat_record *rec = &lat_records[i];
       printf ("LAT,entry=%s,K=%u,phase=%s,calls=%u,begin=%llu,cycles=%llu,"
 	      "checksum=%llx\n",
-	      rec->entry, rec->k, lat_phase (rec->round), rec->k,
+	      rec->entry, rec->k, lat_phase (rec->round), rec->w.calls,
 	      (unsigned long long) rec->w.begin,
 	      (unsigned long long) rec->w.cycles,
 	      (unsigned long long) rec->w.checksum);
@@ -322,6 +355,31 @@ main (void)
 #endif
 #ifdef LAT_GROUP_ACOS_MASKED
   lat_run_group (&lat_group_acos_masked, &checks, &failed);
+  total_checks += checks;
+  total_failed += failed;
+#endif
+#ifdef LAT_GROUP_EXP
+  lat_run_group (&lat_group_exp, &checks, &failed);
+  total_checks += checks;
+  total_failed += failed;
+#endif
+#ifdef LAT_GROUP_LOG
+  lat_run_group (&lat_group_log, &checks, &failed);
+  total_checks += checks;
+  total_failed += failed;
+#endif
+#ifdef LAT_GROUP_SIN
+  lat_run_group (&lat_group_sin, &checks, &failed);
+  total_checks += checks;
+  total_failed += failed;
+#endif
+#ifdef LAT_GROUP_COS
+  lat_run_group (&lat_group_cos, &checks, &failed);
+  total_checks += checks;
+  total_failed += failed;
+#endif
+#ifdef LAT_GROUP_POW
+  lat_run_group (&lat_group_pow, &checks, &failed);
   total_checks += checks;
   total_failed += failed;
 #endif
