@@ -17,12 +17,16 @@
  *                  double log/exp/sin/cos/pow 1 ULP, logf 3 ULP, expf 2 ULP
  *   float sinf/cosf/powf rows appended 2026-11-17 by
  *                  .dsh/tasks/20261117-022109-libmvec-float3-lmul48/script/
- *                  generate_float3_data.py sha256 e93f61a0116e502d1bf30ffd9afa0cb32ef95390b4687c71c45e5d307b4bac18
- *                  (MPFR 4.2.1, 512-bit, seed 123456789): the same 64 corpus
+ *                  generate_float3_data.py sha256 f05f1475d70eba6d3716946b757e71c41238e828794aacaba33f7836361122a3
+ *                  (MPFR 4.2.1, 512-bit, perf seed 123456789; the large
+ *                  verification corpus uses seed 987654321): the same 64 corpus
  *                  points at stride 16 of the shared 1024-point perf stream
  *                  (x in [-32,32)) plus explicit C99 special rows.  Their
  *                  fflags columns are the C99 contract the kernels implement,
- *                  not a measurement of the released library.
+ *                  not a measurement of the released library.  powf gained
+ *                  8 x**+-0 rows (x = 1.5, 1.1, 3, 0.7, 10, 1+2^-10, y = +-0)
+ *                  after review found the vector zeroinfnan(y) dispatch missed
+ *                  y = +-0 and raised a spurious FE_INEXACT.
  *   runtime oracle none: the bare-metal ABI program only reads this file
  *
  * Row layout: { x_bits, y_bits, reference_bits, required_fflags,
@@ -782,7 +786,7 @@ static const abi_case32 abi_cases_cosf[ABI_CASES_COSF] = {
 
 
 
-#define ABI_CASES_POWF 88u
+#define ABI_CASES_POWF 96u
 static const abi_case32 abi_cases_powf[ABI_CASES_POWF] = {
   { 0x40e8d1cfU, 0xbfb5f69fU, 0x3d73db7fU, 0x00, 0x00, 0 },
   { 0x3fefda78U, 0xbead1f65U, 0x3f4f0607U, 0x00, 0x00, 0 },
@@ -858,6 +862,14 @@ static const abi_case32 abi_cases_powf[ABI_CASES_POWF] = {
   { 0xbf800000U, 0x7f800000U, 0x3f800000U, 0x00, 0x1f, 2 },
   { 0x40000000U, 0x00000000U, 0x3f800000U, 0x00, 0x1f, 2 },
   { 0x00000000U, 0x00000000U, 0x3f800000U, 0x00, 0x1f, 2 },
+  { 0x3fc00000U, 0x00000000U, 0x3f800000U, 0x00, 0x1f, 2 },
+  { 0x3fc00000U, 0x80000000U, 0x3f800000U, 0x00, 0x1f, 2 },
+  { 0x3f8ccccdU, 0x00000000U, 0x3f800000U, 0x00, 0x1f, 2 },
+  { 0x3f8ccccdU, 0x80000000U, 0x3f800000U, 0x00, 0x1f, 2 },
+  { 0x40400000U, 0x00000000U, 0x3f800000U, 0x00, 0x1f, 2 },
+  { 0x3f333333U, 0x80000000U, 0x3f800000U, 0x00, 0x1f, 2 },
+  { 0x41200000U, 0x00000000U, 0x3f800000U, 0x00, 0x1f, 2 },
+  { 0x3f802000U, 0x80000000U, 0x3f800000U, 0x00, 0x1f, 2 },
   { 0x40000000U, 0x41200000U, 0x44800000U, 0x00, 0x1c, 0 },
   { 0x40000000U, 0xc1200000U, 0x3a800000U, 0x00, 0x1c, 0 },
   { 0xc0000000U, 0x40400000U, 0xc1000000U, 0x00, 0x1c, 0 },

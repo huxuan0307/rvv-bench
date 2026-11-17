@@ -134,7 +134,12 @@ static __attribute__((always_inline)) inline FV CORE(FV a, FV b, size_t vl)
     /* Scalar pre-check: x must be positive finite normal, y finite nonzero. */
     BV badx = UM(vmsgeu_vx)(U(vsub_vx)(ix, UINT32_C(0x00800000), vl),
                             UINT32_C(0x7f800000 - 0x00800000), vl);
-    BV bady = UM(vmsgeu_vx)(U(vadd_vv)(iy, iy, vl),
+    /* glibc zeroinfnan(i) = (2*i - 1) >= (2*0x7f800000 - 1).  The (2*i - 1)
+       form matters: for y = +-0 it wraps to 0xffffffff, so those lanes must be
+       dispatched to the scalar libm as well (powf(x, +-0) must return 1 without
+       raising FE_INEXACT; the vector log2 path would raise it). */
+    BV bady = UM(vmsgeu_vx)(U(vsub_vx)(U(vadd_vv)(iy, iy, vl),
+                                       UINT32_C(1), vl),
                             UINT32_C(0xfeffffff), vl);
     BV cold = MM(vmor_mm)(badx, bady, vl);
     FV sa = F(vfmerge_vfm)(a, 1.0f, cold, vl);
