@@ -36,9 +36,9 @@
 ## G3/G4：安装后验收，不能用 manifest 代替 ELF
 
 1. 在独立构建目录及前缀，从指定组件 SHA 按外层 Linux/glibc 配方构建；记录 stage1 → glibc headers → 对应 multilib 的 glibc 安装 → stage2，核 `-print-sysroot`、multilib 和实际 include 搜索顺序。基线与候选不得互相拾取头或库。若新增函数没有旧向量入口，G4 明示可调用基线，例如同源标量 libm，不造一个不存在的旧 ABI 来做 A/B。
-2. 用 `python3 -B sysdeps/riscv/rv64/rvd/check-mathvec-variants.py` 在 glibc 源树做结构核对；带 `--cc DRIVER --function SCALAR` 的探针增加编译证据，但自写 extern 不等于已安装 `<math.h>`。同时运行安装头的 C 契约探针及对应 Fortran、glibc libmvec 与 GCC 用例；核动态版本化导出（如 `readelf -WsV`）及静态归档符号。在目标不提供某链接模式时记录范围与理由。
+2. 用 `python3 -B sysdeps/riscv/rv64/rvd/check-mathvec-variants.py` 在 glibc 源树做结构核对；带 `--cc DRIVER --function SCALAR` 的探针增加编译证据，但自写 extern 不等于已安装 `<math.h>`。同时运行安装头的 C 契约探针及对应 Fortran、glibc libmvec 与 GCC 用例；在同一 glibc 构建上执行 `make check-abi`，保存 libmvec 的 symlist 与结果。结构检查只比集合，不能发现 `libmvec.abilist` 的文本排序与生成 symlist 不一致。另核动态版本化导出（如 `readelf -WsV`）及静态归档符号。在目标不提供某链接模式时记录范围与理由。
 3. 每个承诺格至少有**具体符号和原型 → 在可选中条件下的编译器调用/重定位 → 真实 sysroot 链接/装载 → 功能执行**的证据。另用直接 ABI caller 隔离包装器错误。保存无手工属性的普通应用源码、编译命令、优化 dump、对象未定义符号、链接 map、已安装库及 ELF hash。负例检查不存在的符号**没有被引用**，而不只是程序偶然能链接。高 VLEN 等被排除选择的形状用独立 fallback 用例，不用 `not_applicable` 代替基线正例。
-4. 用最终 SDK 分别编译和链接 LTO off/on 的普通消费者，至少覆盖同一应用内两批 libmvec 调用、strict 无向量调用及可用的静态/动态链接。可用外层 `scripts/libmvec/test-autovec.py --lto off,on` 覆盖已有 scalable N 函数；其余 ABI 格用等效消费者。保存实际编译与链接命令、优化诊断、链接 map、最终 ELF 中的调用指令和执行结果；不能用 LTO 中间对象的声明或符号表替代链接后调用证据。oracle 和结果检查器保持非 LTO。此项不替代 G1 的混合声明/链接顺序验证。
+4. 用最终 SDK 分别编译和链接 LTO off/on 的普通消费者，覆盖同一应用内至少两批 libmvec 调用、strict 无 `_ZGV` 调用及可用的静态/动态链接。按 [G3 操作](operation.md#g3-已安装消费者-lto)登记本次 SDK、成对 CSV 和证据 ZIP。外层 `scripts/libmvec/test-autovec.py --lto off,on --workflow-evidence` 只覆盖已有七族的 m1/m2 scalable N；fixed、masked、宽 LMUL 及新增函数按契约用等效消费者。保存实际编译与最终 LTO 链接命令、优化诊断、链接 map/真实 loader 解析、最终 ELF 调用指令和执行结果；不能用中间对象声明或符号表替代。oracle 和结果检查器保持非 LTO。此项不替代 G1 的混合声明/链接顺序验证，也不替代每个承诺格的正负探针。
 5. 对 0/1/混合 mask、短数组、整向量与尾部、不同 VLEN 核验 active 值、`frm`、既有和新增 `fflags`、ABI/栈；高风险改动按 G3 执行对应 RTL。G4 用最终工具链、安装库的消费者路径；分列直接调用和自动向量化。若主张 LTO 降低多次调用开销，按相同源码、库和输入做 off/on 对照，区分静态调用点数和动态调用次数，检查调用前后栈与向量状态指令并测量周期。非 LTO 构建的库不会因消费者开启 LTO 而被跨库内联；未重编重链不引用旧性能结论。
 
 ## G5/G6：报告与外层交接

@@ -113,6 +113,10 @@ def generate(task, output_dir):
     for name in evidence.FORMATS:
         path = directory / name
         lines.append(f"- [{name}](<{os.path.relpath(path, output)}>), SHA256 `{evidence.digest(path)}`")
+    if (directory / evidence.LTO_TABLE).is_file():
+        for name in (evidence.LTO_TABLE, evidence.LTO_BUNDLE):
+            path = directory / name
+            lines.append(f"- [{name}](<{os.path.relpath(path, output)}>), SHA256 `{evidence.digest(path)}`；仅 G3 功能与 ELF 调用证据，不代表性能。")
     report = output / f"libmvec-summary-review-{stamp}.md"
     report.write_text("\n".join(lines) + "\n", encoding="utf-8")
     paths.append(report)

@@ -11,7 +11,7 @@ import unittest
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 import core as C
 import evidence as E
-from test_workflow import fixture
+from test_workflow import fixture, lto_fixture
 
 
 class StateTests(unittest.TestCase):
@@ -134,6 +134,52 @@ class StateTests(unittest.TestCase):
     def test_meta_duplicate_and_path_copy_rejected(self):
         with (self.task.state/"meta.csv").open("a") as stream: stream.write("tool_version,1\n")
         with self.assertRaises(C.WorkflowError): self.task.check("G0")
+
+    def test_consumer_lto_requires_registered_results_and_candidate_manifest(self):
+        bundle = self.task.state / E.LTO_BUNDLE
+        cases, coverage, results = lto_fixture(bundle)
+        case_path = self.task.state / "cases.csv"
+        csv_path = self.task.state / E.LTO_TABLE
+        sdk_path = self.path / "data" / "sdk-SHA256SUMS"
+        sdk_path.write_text("synthetic manifest fixture\n", encoding="utf-8")
+        with case_path.open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.DictWriter(stream, fieldnames=E.CASES)
+            writer.writeheader()
+            writer.writerows(cases)
+        E.write_csv(self.task.state / "coverage.csv", E.COVERAGE, coverage)
+        E.write_csv(csv_path, E.LTO_RESULTS, results)
+        self.task.artifact("target_matrix", str(case_path), "G0", "author")
+        self.task.artifact("coverage", "data/workflow/coverage.csv", "G3", "author")
+        self.assertIn("consumer-csv", " ".join(self.task._evidence_problems("G3")))
+        before = self.task.evidence_digest("G3")
+        self.task.artifact(E.LTO_ARTIFACT, str(csv_path), "G3", "author", artifact_id="consumer-csv")
+        self.assertNotEqual(before, self.task.evidence_digest("G3"))
+        self.assertIn(E.LTO_SDK_ARTIFACT, " ".join(self.task._evidence_problems("G3")))
+        self.task.artifact(E.LTO_SDK_ARTIFACT, str(sdk_path), "G3", "author")
+        self.assertIn("SDK hash", " ".join(self.task._evidence_problems("G3")))
+        for result in results:
+            result["sdk_sha256"] = E.digest(sdk_path)
+        with csv_path.open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.DictWriter(stream, fieldnames=E.LTO_RESULTS)
+            writer.writeheader()
+            writer.writerows(results)
+        self.assertIn("hash变化", " ".join(self.task._evidence_problems("G3")))
+        self.task.artifact(E.LTO_ARTIFACT, str(csv_path), "G3", "author", artifact_id="consumer-csv-v2")
+        self.assertIn("未登记", " ".join(self.task._evidence_problems("G3")))
+        for item in coverage:
+            item["evidence_id"] = "consumer-csv-v2"
+        coverage_path = self.task.state / "coverage.csv"
+        with coverage_path.open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.DictWriter(stream, fieldnames=E.COVERAGE)
+            writer.writeheader()
+            writer.writerows(coverage)
+        self.task.artifact("coverage", str(coverage_path), "G3", "author")
+        self.assertIn(E.LTO_BUNDLE_ARTIFACT, " ".join(self.task._evidence_problems("G3")))
+        self.task.artifact(E.LTO_BUNDLE_ARTIFACT, str(bundle), "G3", "author")
+        self.assertEqual(self.task._evidence_problems("G3"), [])
+        with bundle.open("ab") as stream:
+            stream.write(b"changed after registration")
+        self.assertIn("hash变化", " ".join(self.task._evidence_problems("G3")))
 
     def test_all_gates_and_upstream_retraction(self):
         staging=self.path/"data"/"fixture"

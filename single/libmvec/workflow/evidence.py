@@ -3,11 +3,14 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import io
 import re
 from decimal import Decimal, InvalidOperation
 from fractions import Fraction
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+from stat import S_IFMT, S_IFREG
 from statistics import median
+from zipfile import BadZipFile, ZipFile
 
 SCHEMA = "1"
 COVERAGE = "schema_version,case_id,gate,function,precision,interface,lmul,vlen,mask,frm,input_group,status,expected_count,actual_count,metric,limit,observed,reason,evidence_id".split(",")
@@ -15,6 +18,20 @@ RUNS = "schema_version,run_id,role,pair_id,status,returncode,completion,checks,f
 MEASUREMENTS = "schema_version,run_id,case_id,sample_id,phase,cycles,cycle_begin,cycle_end,counter_bits,calls,elements,timing_repeat,vector_calls,vector_elements,unit,checksum,status".split(",")
 CLAIMS = "schema_version,claim_id,kind,metric,selector,operator,expected,unit,scope,text,evidence_id".split(",")
 CASES = "schema_version,case_id,gate,function,precision,interface,lmul,vlen,mask,frm,input_group,required,expected_count,phases,metric,limit,unit,vector_required,reason".split(",")
+LTO_CASE_DIMS = ("function", "precision", "interface", "lmul", "vlen", "mask", "frm")
+LTO_KEY = (*LTO_CASE_DIMS, "language", "route", "link", "policy")
+LTO_RESULTS = ["schema_version", *LTO_KEY, "lto", "source_sha256", "sdk_sha256",
+               "elf_sha256", "batches", "vector_call_sites", "actual_vector_calls",
+               "tested_values", "max_ulp", "limit_ulp", "exit_code", "status",
+               "source_manifest", "elf", "link_map", "disassembly", "runtime"]
+LTO_SOURCES = ("schema_version", "role", "path", "sha256")
+LTO_TABLE = "consumer-lto.csv"
+LTO_BUNDLE = "consumer-lto.zip"
+LTO_GROUP = "consumer-lto"
+LTO_ARTIFACT = "consumer_lto"
+LTO_SDK_ARTIFACT = "consumer_lto_sdk"
+LTO_BUNDLE_ARTIFACT = "consumer_lto_bundle"
+LTO_PASS = re.compile(r"^AUTOVEC_PASS family=(\w+) tested=(\d+) max_ulp=(\d+) limit=(\d+)$", re.M)
 FORMATS = {"cases.csv": CASES, "coverage.csv": COVERAGE, "runs.csv": RUNS, "measurements.csv": MEASUREMENTS, "claims.csv": CLAIMS}
 IMPORT_KINDS = ("libmvec-samples", "newmath-coverage")
 ENV_KEYS = {"simulator_family", "simulator_sha256", "reference_sha256", "dram_sha256", "isa", "vlen", "toolchain_sha256", "harness_sha256", "input_sha256", "flags", "window"}
@@ -40,31 +57,39 @@ def root(task):
     return Path(getattr(task, "dir", task)).resolve() / "data" / "workflow"
 
 
-def digest(path):
+def stream_digest(stream):
     h = hashlib.sha256()
-    with Path(path).open("rb") as stream:
-        for part in iter(lambda: stream.read(1024 * 1024), b""):
-            h.update(part)
+    for part in iter(lambda: stream.read(1024 * 1024), b""):
+        h.update(part)
     return h.hexdigest()
+
+
+def digest(path):
+    with Path(path).open("rb") as stream:
+        return stream_digest(stream)
+
+
+def parse_csv(stream, label, required):
+    reader = csv.DictReader(stream)
+    fields = reader.fieldnames or []
+    if not fields or len(fields) != len(set(fields)):
+        raise ValueError(f"{label}: 缺少或重复表头")
+    if required and set(fields) != set(required):
+        raise ValueError(f"{label}: schema 列不匹配，要求 {','.join(required)}")
+    rows = list(reader)
+    if not rows:
+        raise ValueError(f"{label}: 空数据")
+    for number, row in enumerate(rows, 2):
+        if None in row or any(v is None for v in row.values()):
+            raise ValueError(f"{label}:{number}: 字段数量错误")
+        if required and row.get("schema_version") != SCHEMA:
+            raise ValueError(f"{label}:{number}: 未知 schema_version")
+    return rows
 
 
 def read_csv(path, required=None):
     with Path(path).open(newline="", encoding="utf-8") as stream:
-        reader = csv.DictReader(stream)
-        fields = reader.fieldnames or []
-        if not fields or len(fields) != len(set(fields)):
-            raise ValueError(f"{Path(path).name}: 缺少或重复表头")
-        if required and set(fields) != set(required):
-            raise ValueError(f"{Path(path).name}: schema 列不匹配，要求 {','.join(required)}")
-        rows = list(reader)
-        if not rows:
-            raise ValueError(f"{Path(path).name}: 空数据")
-        for number, row in enumerate(rows, 2):
-            if None in row or any(v is None for v in row.values()):
-                raise ValueError(f"{Path(path).name}:{number}: 字段数量错误")
-            if required and row.get("schema_version") != SCHEMA:
-                raise ValueError(f"{Path(path).name}:{number}: 未知 schema_version")
-        return rows
+        return parse_csv(stream, Path(path).name, required)
 
 
 def write_csv(path, fields, rows):
@@ -344,6 +369,232 @@ def validate_new_api_matrix(cases, gate=None):
             raise ValueError(f"{row['case_id']}: G4 new-api 性能场景不是已承诺的有效接口 {cell}")
 
 
+def consumer_lto_plan(cases):
+    """Decode preregistered G3 pairs without changing the existing cases schema."""
+    plans = {}
+    for row in cases:
+        group = row["input_group"]
+        if group != LTO_GROUP and not group.startswith(LTO_GROUP + "/"):
+            continue
+        fields = group.split("/")
+        label = row["case_id"]
+        if len(fields) != 5:
+            raise ValueError(f"{label}: consumer-lto 须指定 language/route/link/policy")
+        _, language, route, link, policy = fields
+        if (row["gate"] != "G3" or row["required"] != "yes"
+                or policy not in {"positive", "strict"}
+                or link not in {"static", "shared"}
+                or not re.fullmatch(r"[a-z0-9][a-z0-9-]*", language)
+                or route not in {"native", "installed-contract"}
+                or (route == "installed-contract" and
+                    (language != "gcc-fortran" or policy != "positive"))
+                or row["vector_required"] != ("yes" if policy == "positive" else "no")):
+            raise ValueError(f"{label}: consumer-lto 预登记条件无效")
+        if (not re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*", row["function"])
+                or row["precision"] not in {"f32", "f64"}
+                or row["interface"] not in NEW_API_INTERFACES
+                or row["mask"] not in NEW_API_MASKS
+                or row["lmul"] not in (*NEW_API_LMULS, "natural")
+                or row["metric"] != "encoding-step"):
+            raise ValueError(f"{label}: consumer-lto 函数、形状或指标无效")
+        integer(row["vlen"], f"{label} VLEN", 128)
+        integer(row["limit"], f"{label} limit")
+        if int(row["expected_count"]) < 4 or int(row["expected_count"]) % 2:
+            raise ValueError(f"{label}: consumer-lto expected_count 须为两档总数（偶数且至少 4）")
+        key = (*[row[k] for k in LTO_CASE_DIMS], language, route, link, policy)
+        if key in plans:
+            raise ValueError(f"{label}: consumer-lto 预登记组合重复")
+        plans[key] = row
+    if plans and not any(key[-1] == "positive" for key in plans):
+        raise ValueError("consumer-lto: 不能只登记 strict，缺少 positive")
+    for key, row in plans.items():
+        if key[-1] == "positive" and (*key[:-3], "native", key[-2], "strict") not in plans:
+            raise ValueError(f"{row['case_id']}: consumer-lto 缺少配套 native strict 用例")
+    return plans
+
+
+def validate_lto_calls(result, plan):
+    label = plan["case_id"]
+    count = integer(result["vector_call_sites"], f"{label} 静态调用点数")
+    calls = result["actual_vector_calls"].split(";") if result["actual_vector_calls"] else []
+    if result["policy"] == "strict":
+        if count or calls:
+            raise ValueError(f"{label}: strict 最终 ELF 含应用 _ZGV 调用")
+        return
+    if not calls or len(calls) != len(set(calls)) or count < len(calls):
+        raise ValueError(f"{label}: positive 缺少有效的最终 ELF 调用证据")
+    requested = plan["lmul"]
+    optional_tail = requested == "2" and plan["interface"] == "variable" and plan["mask"] == "unmasked"
+    sew = int(plan["precision"][1:])
+    branch = "M" if plan["mask"] == "masked" else "N"
+    matched = False
+    for symbol in calls:
+        match = re.fullmatch(r"_ZGV([1248])([NM])(x|[0-9]+)v{1,2}_" + re.escape(plan["function"]), symbol)
+        if not match:
+            raise ValueError(f"{label}: 非目标向量调用 {symbol}")
+        lmul, form, length = match.groups()
+        expected_length = "x" if plan["interface"] == "variable" else str((128 // sew) * int(lmul))
+        if form != branch or length != expected_length:
+            raise ValueError(f"{label}: 调用形状不符合预登记 {symbol}")
+        if requested in {"natural", lmul}:
+            matched = True
+        elif not (optional_tail and lmul == "1"):
+            raise ValueError(f"{label}: 非目标 LMUL {symbol}")
+    if not matched:
+        raise ValueError(f"{label}: 未调用要求的 LMUL")
+
+
+def validate_lto_bundle(path, results):
+    # Bind results to preserved bytes without extracting or running the archive.
+    with ZipFile(path) as archive:
+        infos = archive.infolist()
+        members = {info.filename: info for info in infos}
+        if len(members) != len(infos):
+            raise ValueError("consumer-lto: 归档成员重名")
+
+        def member(name):
+            posix = PurePosixPath(name)
+            info = members.get(name)
+            if (not name or posix.is_absolute() or ".." in posix.parts or "\\" in name
+                    or posix.as_posix() != name or any(ord(c) < 32 for c in name)
+                    or info is None or info.orig_filename != name or info.is_dir() or not info.file_size
+                    or info.flag_bits & 1
+                    or (info.create_system == 3 and S_IFMT(info.external_attr >> 16) not in {0, S_IFREG})):
+                raise ValueError(f"consumer-lto: 归档成员无效或缺失 {name!r}")
+            return info
+
+        def read_small(name):
+            if member(name).file_size > 1024 * 1024:
+                raise ValueError(f"consumer-lto: 源码清单或运行输出过大 {name}")
+            return archive.read(name)
+
+        member("commands.txt")
+        hashes, source_sets, binaries, runtime_paths = {}, {}, {}, set()
+
+        def member_sha(name, *, elf=False):
+            member(name)
+            cache_key = name, elf
+            if cache_key not in hashes:
+                with archive.open(name) as stream:
+                    if elf:
+                        header = stream.read(20)
+                        if (len(header) < 20 or header[:6] != b"\x7fELF\x02\x01"
+                                or header[18:20] != b"\xf3\x00"):
+                            raise ValueError(f"consumer-lto: 不是 RV64 LE ELF {name}")
+                        stream.seek(0)
+                    hashes[cache_key] = stream_digest(stream)
+            return hashes[cache_key]
+
+        for row in results:
+            source_manifest = row["source_manifest"]
+            if source_manifest not in source_sets:
+                content = read_small(source_manifest)
+                sources = parse_csv(io.StringIO(content.decode("utf-8")), source_manifest, LTO_SOURCES)
+                unique(sources, ("role",), source_manifest)
+                unique(sources, ("path",), source_manifest)
+                for source in sources:
+                    if member_sha(source["path"]) != source["sha256"]:
+                        raise ValueError(f"consumer-lto: 源文件 hash 不匹配 {source['path']}")
+                source_sets[source_manifest] = hashlib.sha256(content).hexdigest(), {s["role"] for s in sources}
+            expected_roles = {"consumer", "kernel", "oracle", "checker"}
+            if row["route"] == "installed-contract":
+                expected_roles.add("installed-contract")
+            if source_sets[source_manifest] != (row["source_sha256"], expected_roles):
+                raise ValueError(f"consumer-lto: 源码清单 hash 或角色不匹配 {source_manifest}")
+            if member_sha(row["elf"], elf=True) != row["elf_sha256"]:
+                raise ValueError(f"consumer-lto: 最终 ELF hash 不匹配 {row['elf']}")
+            binary_key = tuple(row[k] for k in (*LTO_KEY, "lto") if k != "vlen")
+            for field in ("elf", "link_map", "disassembly"):
+                name = row[field]
+                member(name)
+                if name in runtime_paths or binaries.setdefault(name, (field, binary_key)) != (field, binary_key):
+                    raise ValueError(f"consumer-lto: 跨构建或证据类型复用归档成员 {name}")
+            runtime = row["runtime"]
+            if runtime in runtime_paths or runtime in binaries:
+                raise ValueError(f"consumer-lto: 重复使用运行输出 {runtime}")
+            runtime_paths.add(runtime)
+            markers = LTO_PASS.findall(read_small(runtime).decode("utf-8", errors="replace"))
+            expected = (row["function"], row["tested_values"], row["max_ulp"], row["limit_ulp"])
+            if markers != [expected]:
+                raise ValueError(f"consumer-lto: 运行完成标记与结果不匹配 {runtime}")
+
+
+def validate_consumer_lto(task, plans, loaded, gate):
+    if gate not in {None, "G3", "G4", "G5", "G6"}:
+        return
+    table = root(task) / LTO_TABLE
+    bundle = root(task) / LTO_BUNDLE
+    if not plans:
+        if any(path.exists() or path.is_symlink() for path in (table, bundle)):
+            raise ValueError("consumer-lto: 已有结果但没有 G0 预登记")
+        return
+    if table.is_symlink() or not table.is_file() or "coverage.csv" not in loaded:
+        raise ValueError(f"consumer-lto: 缺少 {LTO_TABLE} 或 coverage.csv，不能通过 G3")
+    results = read_csv(table, LTO_RESULTS)
+    unique(results, (*LTO_KEY, "lto"), LTO_TABLE)
+    grouped = {}
+    sdk_ids = set()
+    for result in results:
+        key = tuple(result[k] for k in LTO_KEY)
+        lto = result["lto"]
+        if key not in plans or lto not in {"off", "on"}:
+            raise ValueError(f"consumer-lto: 未预登记的结果 {key}/{lto}")
+        label = plans[key]["case_id"]
+        for field in ("source_sha256", "sdk_sha256", "elf_sha256"):
+            if not re.fullmatch(r"[a-f0-9]{64}", result[field]):
+                raise ValueError(f"{label}: {field} 格式无效")
+        sdk_ids.add(result["sdk_sha256"])
+        if result["status"] != "pass" or result["exit_code"] != "0":
+            raise ValueError(f"{label}: consumer-lto {lto} 未通过执行")
+        batches = integer(result["batches"], f"{label} batches", 2)
+        tested = integer(result["tested_values"], f"{label} tested_values", batches)
+        if 2 * tested != int(plans[key]["expected_count"]):
+            raise ValueError(f"{label}: tested_values 须精确匹配预登记总数的一半")
+        error = integer(result["max_ulp"], f"{label} max_ulp")
+        if result["limit_ulp"] != plans[key]["limit"] or error > int(result["limit_ulp"]):
+            raise ValueError(f"{label}: consumer-lto 超预算或预算与预登记不同")
+        validate_lto_calls(result, plans[key])
+        grouped.setdefault(key, {})[lto] = result
+
+    if len(sdk_ids) != 1:
+        raise ValueError("consumer-lto: G3 结果混用不同 SDK 身份")
+    coverage = {r["case_id"]: r for r in loaded["coverage.csv"]}
+    evidence_id = None
+    if hasattr(task, "artifacts"):
+        artifacts = task.artifacts("G3")
+
+        def require_artifact(kind, path):
+            registered = [r for r in artifacts if r["kind"] == kind]
+            # validate_artifact_references has already checked the on-disk digest.
+            if len(registered) != 1 or Path(task.path(registered[0]["path"])) != path.resolve():
+                raise ValueError(f"consumer-lto: 必须把 {path.name} 唯一登记为 G3 {kind}")
+            return registered[0]["artifact_id"]
+
+        evidence_id = require_artifact(LTO_ARTIFACT, table)
+        sdk = [r for r in artifacts if r["kind"] == LTO_SDK_ARTIFACT]
+        if len(sdk) != 1 or {sdk[0]["sha256"]} != sdk_ids:
+            raise ValueError(f"consumer-lto: SDK hash 与 G3 登记的 {LTO_SDK_ARTIFACT} 不一致")
+        require_artifact(LTO_BUNDLE_ARTIFACT, bundle)
+
+    for key, plan in plans.items():
+        label = plan["case_id"]
+        pair = grouped.get(key, {})
+        if pair.keys() != {"off", "on"}:
+            raise ValueError(f"{label}: 缺少 LTO off/on 成对结果")
+        off, on = pair["off"], pair["on"]
+        if any(off[k] != on[k] for k in ("source_sha256", "batches", "tested_values")):
+            raise ValueError(f"{label}: LTO off/on 源码或检查范围不同")
+        record = coverage[label]
+        if (record["status"] != "pass"
+                or int(record["actual_count"]) != 2 * int(off["tested_values"])
+                or number(record["observed"]) != max(int(r["max_ulp"]) for r in pair.values())
+                or (evidence_id is not None and record["evidence_id"] != evidence_id)):
+            raise ValueError(f"{label}: coverage 未与 LTO off/on 实测及证据对账")
+    if bundle.is_symlink() or not bundle.is_file():
+        raise ValueError(f"consumer-lto: 缺少 {LTO_BUNDLE}")
+    validate_lto_bundle(bundle, results)
+
+
 def validate_cases(cases, loaded, gate):
     unique(cases, ("gate", "case_id"), "cases")
     for row in cases:
@@ -395,6 +646,7 @@ def validate_cases(cases, loaded, gate):
                 if plan["vector_required"] == "yes" and any(int(r["vector_calls"]) == 0 for r in rows):
                     raise ValueError(f"{key}: 没有实际向量调用证据")
     validate_new_api_matrix(cases, gate)
+    return consumer_lto_plan(cases)
 
 
 def validate_artifact_references(task, loaded):
@@ -451,12 +703,14 @@ def check_task(task, gate=None):
             errors.append(f"{gate}: 缺少 {filename}")
     try:
         validate_artifact_references(task, loaded)
+        plans = {}
         if "cases.csv" in loaded:
-            validate_cases(loaded["cases.csv"], loaded, gate)
+            plans = validate_cases(loaded["cases.csv"], loaded, gate)
         elif any(k in loaded for k in ("coverage.csv", "measurements.csv")):
             raise ValueError("缺少预登记 cases.csv")
         if "coverage.csv" in loaded:
             validate_coverage(loaded["coverage.csv"])
+        validate_consumer_lto(task, plans, loaded, gate)
         if "runs.csv" in loaded:
             validate_runs(loaded["runs.csv"])
         comp = []
@@ -464,7 +718,7 @@ def check_task(task, gate=None):
             comp = comparisons(loaded["measurements.csv"], loaded.get("runs.csv", []))
         if "claims.csv" in loaded:
             evaluate_claims(loaded["claims.csv"], loaded.get("coverage.csv", []), comp)
-    except (ValueError, KeyError, InvalidOperation, ZeroDivisionError) as exc:
+    except (ValueError, KeyError, OSError, BadZipFile, csv.Error, InvalidOperation, ZeroDivisionError) as exc:
         errors.append(str(exc))
     return errors
 

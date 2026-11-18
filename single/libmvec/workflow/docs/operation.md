@@ -52,6 +52,33 @@ python3 "$CLI" status --task "$TASK"
 
 详细参数、支持的证据类别和退出码以 `--help` 及当前实现为准：0 为成功、1 为门禁阻断、2 为输入或工具错误。缺少证据模块或格式未知时不得把输出当通过。工具生成的 CSV 是机器可读证据，不取代面向用户的 Markdown 报告。
 
+## G3 已安装消费者 LTO
+
+先按 [schema](evidence-schema.md#consumer-ltocsv消费者-lto-配对)冻结适用用例。取外层工具链源码中支持 `--workflow-evidence` 的 `scripts/libmvec/test-autovec.py`，从**最终候选安装前缀**运行。调用者提供刚核验的发行 `SHA256SUMS`、对应组件/配方、配套 QEMU 和不存在的带时间戳运行输出；前缀在运行期间不可变。下例是一个 GCC C scoped smoke，不是批量全范围命令：
+
+```bash
+python3 "$TOOLCHAIN_SRC/scripts/libmvec/test-autovec.py" \
+  --prefix "$SDK_PREFIX" --qemu "$QEMU" --output "$OUTPUT" \
+  --languages gcc-c --families log --modes natural --vlen 128 \
+  --links static,shared --policies positive,strict --lto off,on --workflow-evidence
+```
+
+从成功运行归档结果到任务 `data/workflow/consumer-lto.csv` 和同目录 `data/workflow/consumer-lto.zip`；ZIP 含四役源码（consumer/kernel/oracle/checker；Fortran 契约组另含 installed-contract）、源码清单、最终 ELF、link map、反汇编、runtime stdout 与命令记录，所有成员路径为 ZIP 内相对名。另归档候选的 `SHA256SUMS`（例如 `data/sdk-SHA256SUMS`）和组件/环境与原始证据，编制 `coverage.csv` 后登记。下列 `AUTHOR` 代表取证作者，外层执行权限、审查和后续推进仍分开：
+
+```bash
+python3 "$CLI" artifact --task "$TASK" --gate G3 --kind consumer_lto \
+  --path data/workflow/consumer-lto.csv --author "$AUTHOR" --artifact-id CONSUMER_LTO
+python3 "$CLI" artifact --task "$TASK" --gate G3 --kind consumer_lto_bundle \
+  --path data/workflow/consumer-lto.zip --author "$AUTHOR" --artifact-id CONSUMER_LTO_BUNDLE
+python3 "$CLI" artifact --task "$TASK" --gate G3 --kind consumer_lto_sdk \
+  --path data/sdk-SHA256SUMS --author "$AUTHOR" --artifact-id LTO_SDK
+python3 "$CLI" artifact --task "$TASK" --gate G3 --kind coverage \
+  --path data/workflow/coverage.csv --author "$AUTHOR" --artifact-id COVERAGE
+python3 "$CLI" check --task "$TASK" --gate G3 --evidence-only
+```
+
+结果 CSV、归档 ZIP、SDK 清单与其余 G3 证据一起进入审批摘要。审核者核对候选组件与实际安装头、库和其 SHA256，检查 off/on 仅改变 LTO 及其必需后端参数，确认目标两 TU、独立非 LTO checker/oracle、最终调用、静态 map/归档成员或动态 loader 实际解析、同一 ELF 完成标记和输出预算。静态和动态若都可用，两者均应预登记；如果一项不受支持，在 G0 记录理由。超出 runner 支持的函数和 ABI 形状，以等效消费者生成相同 schema 的证据，不删除计划。示例命令不会证明 G3 全部通过；预检后仍须完成实质独立审阅，再按正常门禁推进。既有未带 tag 的历史任务不被要求补写历史事实；切到新源码后按工具 hash 失效规则办理复审。
+
 ## 主机回归与依赖
 
 依赖 Python 3.10+ 标准库及 POSIX `fcntl`；没有第三方 Python 包，不适用于未适配的 Windows 文件锁环境。以下只运行离线合成数据/状态测试，不启动 RISC-V 仿真。`TASK` 指向已获授权的现有任务，`SRC` 是对应 worktree 源码的绝对路径。

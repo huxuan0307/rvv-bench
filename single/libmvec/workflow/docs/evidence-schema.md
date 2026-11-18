@@ -1,6 +1,6 @@
 # 证据 CSV schema（版本 1）
 
-首版是 full-development profile；G3/G4/G5 的适用矩阵不能整体省略。以下列名以同目录 `evidence.py` 的 `FORMATS` 和运行时检查为准；CSV 用 UTF-8、表头不能重复、不能有多余/缺少列，逐行 `schema_version=1`。运行前应冻结预登记案例，绝不靠删除结果行或改变适用性掩盖缺口。所有 ID 应能通过已登记的 artifact 定位到完整、可复核的永久证据；自填 ID 本身不证明结果。
+首版是 full-development profile；G3/G4/G5 的适用矩阵不能整体省略。以下列名以 [evidence.py](../evidence.py) 的 schema 常量和运行时检查为准；CSV 用 UTF-8、表头不能重复、不能有多余/缺少列，逐行 `schema_version=1`。运行前应冻结预登记案例，绝不靠删除结果行或改变适用性掩盖缺口。所有 ID 应能通过已登记的 artifact 定位到完整、可复核的永久证据；自填 ID 本身不证明结果。
 
 ## cases.csv：预登记矩阵
 
@@ -19,6 +19,21 @@ schema_version,case_id,gate,function,precision,interface,lmul,vlen,mask,frm,inpu
 ```
 
 每个预登记 G3 案例一行，维度及预算与矩阵一致；`status` 使用 `pass`、`fail`、`skip`、`not_run`、`not_applicable`。必测项须通过，`not_applicable` 需理由及独立审阅。`actual_count` 是实际检查数；`metric` 明确真值 ULP、编码步距或其他指标，pass 行的 `limit/observed` 必须是同口径的非负有限预算及观测，且观测不超过预算；布尔语义检查可使用失败数预算 0。采样不证明全域上界。
+
+## consumer-lto.csv：消费者 LTO 配对
+
+交付或变更已安装自动向量化路径时，G0 冻结 `input_group=consumer-lto/<language>/<route>/<link>/<policy>` 的 G3 行，每个组合**一条计划行**，对应同一用例的两条结果 `lto=off/on`。未涉及该路径的项目可继续使用原矩阵；CLI 不读契约自然语言，G0 独立审查必须对账所有计划中的消费者与链接方式，确认没有整组漏登。新增 API 的 `new-api` 接口探针仍须单独登记。
+
+- `language` 为编译器及语言标识（如 `gcc-c`、`clang-cxx`）；`route=native` 使用普通安装头或原生 intrinsic，`installed-contract` 仅为显式选用安装声明的 GCC Fortran positive；`link=static|shared`；`policy=positive|strict`。每个 positive 要有相同函数、精度、形状、VLEN、`frm`、语言及链接方式的 native strict 配对用例。strict 行的形状标识被禁用的对照，**不**要求生成该形状。
+- 所有配对行 `required=yes`，仅 positive `vector_required=yes`，`metric=encoding-step`。`interface=fixed|variable`、`mask=masked|unmasked`、`precision=f32|f64`、`lmul=natural|1|2|4|8`；`natural` 表示不强制宽度，实际宽度须符合 SDK 可发出的能力。现有 runner 最小例的 tag 是 `consumer-lto/clang-c/native/shared/positive` 和对应 strict；`log`、f64、variable、natural、128、unmasked、RNE，`limit=8`、`expected_count=8112`（两档 × 每档 4056 个 active 输出）。
+
+```text
+schema_version,function,precision,interface,lmul,vlen,mask,frm,language,route,link,policy,lto,source_sha256,sdk_sha256,elf_sha256,batches,vector_call_sites,actual_vector_calls,tested_values,max_ulp,limit_ulp,exit_code,status,source_manifest,elf,link_map,disassembly,runtime
+```
+
+`source_sha256` 是 ZIP 内源码清单文件本身的 SHA256；`sdk_sha256` 是本次 SDK `SHA256SUMS` 清单文件自身的 SHA256；`elf_sha256` 是该档位、链接方式最终执行的 ELF 内容 SHA256。`source_manifest`、`elf`、`link_map`、`disassembly`、`runtime` 是 ZIP 内相对 member 名，ZIP 归档在 `data/workflow/consumer-lto.zip`；CLI 需打开 ZIP（不解包）核对成员存在、源码/ELF hash 和 runtime 结束标记，并把 ZIP 整体登记为 `consumer_lto_bundle`。`batches` 是每次消费者处理的输入批数（至少两批），`tested_values` 是该 VLEN 一次进程实际比较的 active 输出数；`max_ulp`、`limit_ulp` 沿用 runner 命名，此处是相对标量 oracle 的最大编码步距及上限，不是真值 ULP。`vector_call_sites` 是静态调用指令数量，`actual_vector_calls` 是去重后的公共符号，以分号分隔；strict 两列为 `0` 和空。positive 要有目标形状的实际调用；m2 通用可伸缩无 mask 允许合法 m1 向量尾调用。`exit_code=0` 与 `status=pass` 要求实际执行通过，不能把生成源码或只链接计作通过。
+
+CLI 检查组合全集、off/on 唯一性、配对源码/批数/比较数、单一已登记 SDK 摘要、调用形状和误差；`expected_count` 必须为偶数且至少 4，每档恰为总数一半并至少两批。对应 coverage 用例的 `actual_count` 是两档 `tested_values` 之和，`observed` 取两档 `max_ulp` 的较大值，`evidence_id` 指向 G3 登记的这份 CSV。只接受本次发布候选，不把历史 CSV 改写为通过项。ZIP 不是签名，CLI 不重跑程序或重新反汇编，不证明真实执行与实际加载，也不推断 C 原型的实参个数或所有允许的符号。独立审查须从实际 SDK 复算身份，核对命令、原始调用、链接/加载与执行证据。详见 [G3 操作](operation.md#g3-已安装消费者-lto)。
 
 ## runs.csv：运行和 A/B 身份
 

@@ -6,7 +6,7 @@
 - [阶段、稳定编号清单与证据](docs/checklist.md)
 - [角色、派工、审阅与 bug 模板](docs/roles-and-templates.md)
 - [工具边界、权限与恢复](docs/operation.md)
-- [证据 CSV schema 与检查边界](docs/evidence-schema.md)
+- [证据 CSV schema 与检查边界](docs/evidence-schema.md)；已安装消费者的 LTO off/on 按 [G3 取证和登记](docs/operation.md#g3-已安装消费者-lto)办理，性能收益另验。
 
 ## 状态机
 

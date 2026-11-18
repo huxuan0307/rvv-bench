@@ -90,6 +90,7 @@ ALL_KINDS: Tuple[str, ...] = (
     "environment", "tool", "baseline", "screening", "coverage", "runs",
     "measurements", "claims", "report", "delivery", "validation", "raw",
     "source", "bug", "review", "code", "data", "log", "process", "build",
+    "consumer_lto", "consumer_lto_sdk", "consumer_lto_bundle",
 )
 PROCESS_KINDS = frozenset(("log", "process", "build"))
 ARTIFACT_ROLES: Tuple[str, ...] = (

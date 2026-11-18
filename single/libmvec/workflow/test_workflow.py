@@ -3,13 +3,16 @@ from __future__ import annotations
 
 import copy
 import csv
+import hashlib
 import os
 import sys
 import tempfile
 import unittest
 from fractions import Fraction
 from pathlib import Path
+from stat import S_IFLNK
 import xml.etree.ElementTree as ET
+from zipfile import ZipFile, ZipInfo
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import evidence as E
@@ -174,6 +177,154 @@ class EvidenceTests(unittest.TestCase):
     def test_report_rejects_missing_case(self):
         self.replace("coverage.csv",[])
         with self.assertRaises(ValueError): reporting.generate(self.task,self.task/"report"/"bad")
+
+
+def lto_fixture(bundle):
+    cases, coverage, results = [], [], []
+    members = {"commands.txt": b"synthetic commands; these tools did not run\n"}
+    source_manifest = "sources/native.csv"
+    lines = [",".join(E.LTO_SOURCES)]
+    for role in ("consumer", "kernel", "oracle", "checker"):
+        name = f"sources/{role}.c"
+        content = f"/* synthetic {role} */\n".encode()
+        members[name] = content
+        lines.append(f"1,{role},{name},{hashlib.sha256(content).hexdigest()}")
+    members[source_manifest] = ("\n".join(lines) + "\n").encode()
+    for policy in ("positive", "strict"):
+        case = row(E.CASES, case_id="consumer-" + policy, gate="G3", function="atan2",
+                   precision="f64", interface="fixed", lmul="2", vlen="128", mask="masked",
+                   frm="RNE", input_group=f"consumer-lto/gcc-c/native/shared/{policy}",
+                   required="yes", expected_count="8", metric="encoding-step", limit="2",
+                   vector_required="yes" if policy == "positive" else "no")
+        cases.append(case)
+        coverage.append(row(E.COVERAGE, **{k: case[k] for k in E.COVERAGE if k in case
+                                          and k != "schema_version"},
+                            status="pass", actual_count="8", observed="1", evidence_id="consumer-csv"))
+        for mode in ("off", "on"):
+            prefix = f"{policy}-{mode}"
+            elf = prefix + ".elf"
+            link_map = prefix + ".map"
+            disassembly = prefix + ".dis"
+            runtime = prefix + ".txt"
+            # Minimal RV64 ELF ident/machine for a synthetic archive; not executable.
+            members[elf] = b"\x7fELF\x02\x01" + bytes(12) + b"\xf3\0" + prefix.encode()
+            members[link_map] = b"synthetic link map\n"
+            members[disassembly] = b"synthetic disassembly\n"
+            error = "0" if mode == "off" else "1"
+            members[runtime] = f"AUTOVEC_PASS family=atan2 tested=4 max_ulp={error} limit=2\n".encode()
+            results.append(row(E.LTO_RESULTS, **{k: case[k] for k in E.LTO_CASE_DIMS},
+                               language="gcc-c", route="native", link="shared", policy=policy,
+                               lto=mode, source_sha256=hashlib.sha256(members[source_manifest]).hexdigest(),
+                               sdk_sha256="b" * 64, elf_sha256=hashlib.sha256(members[elf]).hexdigest(),
+                               batches="2", vector_call_sites="1" if policy == "positive" else "0",
+                               actual_vector_calls="_ZGV2M4vv_atan2" if policy == "positive" else "",
+                               tested_values="4", max_ulp=error, limit_ulp="2", exit_code="0", status="pass",
+                               source_manifest=source_manifest, elf=elf, link_map=link_map,
+                               disassembly=disassembly, runtime=runtime))
+    with ZipFile(bundle, "x") as archive:
+        for name, content in members.items():
+            archive.writestr(name, content)
+    return cases, coverage, results
+
+
+class ConsumerLtoTests(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="consumer-lto-tests-", dir=os.environ.get("TEST_TMPDIR"))
+        self.addCleanup(tmp.cleanup)
+        self.task = Path(tmp.name) / "task"
+        E.root(self.task).mkdir(parents=True)
+        self.bundle = E.root(self.task) / E.LTO_BUNDLE
+        self.cases, self.coverage, self.results = lto_fixture(self.bundle)
+        self.replace("cases.csv", self.cases)
+        self.replace("coverage.csv", self.coverage)
+
+    def replace(self, name, rows):
+        with (E.root(self.task) / name).open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.DictWriter(stream, fieldnames=(E.LTO_RESULTS if name == E.LTO_TABLE else E.FORMATS[name]))
+            writer.writeheader()
+            writer.writerows(rows)
+
+    def install_results(self, rows):
+        self.replace(E.LTO_TABLE, rows)
+
+    def test_lto_required_only_from_g3(self):
+        self.assertEqual(E.check_task(self.task, "G0"), [])
+        self.assertIn(E.LTO_TABLE, " ".join(E.check_task(self.task, "G3")))
+        self.install_results(self.results)
+        self.assertEqual(E.check_task(self.task, "G3"), [])
+
+    def test_lto_invalid_plan(self):
+        for cases in ([self.cases[0]], [self.cases[1]],
+                      [*self.cases, dict(self.cases[0], case_id="duplicate")],
+                      [dict(self.cases[0], input_group="consumer-lto"), self.cases[1]],
+                      [dict(self.cases[0], required="no", reason="fixture"), self.cases[1]],
+                      [dict(self.cases[0], expected_count="7"), self.cases[1]]):
+            with self.subTest(cases=cases):
+                self.replace("cases.csv", cases)
+                with self.assertRaisesRegex(ValueError, "consumer-lto"):
+                    E.validate_cases(E.read_csv(E.root(self.task) / "cases.csv", E.CASES), {}, "G0")
+
+    def test_lto_missing_or_duplicate_modes(self):
+        for rows, diagnostic in ((self.results[1:], "成对"),
+                                 ([*self.results, self.results[0]], "重复键")):
+            self.install_results(rows)
+            self.assertIn(diagnostic, " ".join(E.check_task(self.task, "G3")))
+
+    def test_lto_rejects_false_passes(self):
+        for index, field, value, diagnostic in (
+            (0, "source_sha256", "e" * 64, "源码或检查范围不同"),
+            (0, "sdk_sha256", "e" * 64, "混用不同 SDK"),
+            (0, "elf_sha256", "bad", "elf_sha256"),
+            (0, "vlen", "256", "未预登记"),
+            (0, "batches", "1", "batches"),
+            (0, "tested_values", "3", "预登记总数的一半"),
+            (0, "elf_sha256", "e" * 64, "最终 ELF hash"),
+            (0, "link_map", "../outside.map", "归档成员无效"),
+            (0, "disassembly", "not-retained.txt", "归档成员无效"),
+            (1, "runtime", "positive-off.txt", "重复使用运行输出"),
+            (1, "max_ulp", "2", "coverage 未与"),
+            (0, "actual_vector_calls", "_ZGV2Mxvv_atan2", "调用形状"),
+            (0, "vector_call_sites", "0", "缺少有效"),
+            (1, "max_ulp", "3", "超预算"),
+            (1, "exit_code", "1", "未通过执行"),
+            (2, "actual_vector_calls", "_ZGV2M4vv_atan2", "strict 最终 ELF"),
+        ):
+            with self.subTest(field=field, value=value):
+                rows = copy.deepcopy(self.results)
+                rows[index][field] = value
+                self.install_results(rows)
+                self.assertIn(diagnostic, " ".join(E.check_task(self.task, "G3")))
+
+    def test_lto_archive_bytes_and_completion_are_rechecked(self):
+        self.install_results(self.results)
+        with ZipFile(self.bundle) as archive:
+            original = {name: archive.read(name) for name in archive.namelist()}
+        for name, payload, diagnostic in (
+            ("sources/kernel.c", b"changed source", "源文件 hash"),
+            (self.results[0]["elf"], b"not an ELF", "不是 RV64 LE ELF"),
+            (self.results[0]["runtime"], b"run failed\n", "完成标记与结果不匹配"),
+        ):
+            with self.subTest(member=name):
+                with ZipFile(self.bundle, "w") as archive:
+                    for member, content in dict(original, **{name: payload}).items():
+                        archive.writestr(member, content)
+                self.assertIn(diagnostic, " ".join(E.check_task(self.task, "G3")))
+        runtime = self.results[0]["runtime"]
+        symlink = ZipInfo(runtime)
+        symlink.create_system = 3
+        symlink.external_attr = (S_IFLNK | 0o777) << 16
+        with ZipFile(self.bundle, "w") as archive:
+            for member, content in original.items():
+                archive.writestr(symlink if member == runtime else member, content)
+        self.assertIn("归档成员无效", " ".join(E.check_task(self.task, "G3")))
+        self.bundle.write_bytes(b"not a ZIP")
+        self.assertIn("zip file", " ".join(E.check_task(self.task, "G3")))
+
+    def test_lto_requires_coverage_reconciliation(self):
+        self.install_results(self.results)
+        self.coverage[0]["observed"] = "0"
+        self.replace("coverage.csv", self.coverage)
+        self.assertIn("对账", " ".join(E.check_task(self.task, "G3")))
 
 
 class NewApiMatrixTests(unittest.TestCase):
