@@ -12,6 +12,8 @@
 | scope_sha256 | 适用范围与非目标（含 N/A 判定依据） | `--file scope_sha256=<path>` |
 | target_matrix_sha256 | 预注册矩阵 `data/workflow/cases.csv` | `--file target_matrix_sha256=data/workflow/cases.csv` |
 
+涉及精度时，契约包含[真值 ULP、双档与语料要求](../docs/accuracy-screening.md)，矩阵单列数值、状态和消费者回归。G0 不额外填 `oracle_sha256` 等 G1b 键。
+
 ## G1a（设计与测量协议）
 
 | 键 | 来源 | 记录方式 |
@@ -30,8 +32,10 @@
 | emu | 模拟器名与 sha256 | `--set emu=<name:sha>` |
 | refmodel | 参考模型 sha256 | `--set refmodel=<sha>` |
 | inputs_sha256 | 冻结输入头/语料清单 sha256 | `--file inputs_sha256=<path>` |
-| oracle_sha256 | MPFR/oracle 清单 sha256 | `--file oracle_sha256=<path>` |
+| oracle_sha256 | 主机 oracle 的版本、精度阶梯、工具及包络数据 SHA256 清单 | `--file oracle_sha256=<path>` |
 | seed | 随机种子 | `--set seed=<n>` |
+
+适用精度规约时，两份冻结清单须能定位数据和成员 SHA256；审查者复核成员身份。CLI 重算清单或已单独登记文件的哈希，不理解清单内的精度语义。
 
 ## 命令
 

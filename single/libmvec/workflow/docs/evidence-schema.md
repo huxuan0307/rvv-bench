@@ -20,6 +20,15 @@ schema_version,case_id,gate,function,precision,interface,lmul,vlen,mask,frm,inpu
 
 每个预登记 G3 案例一行，维度及预算与矩阵一致；`status` 使用 `pass`、`fail`、`skip`、`not_run`、`not_applicable`。必测项须通过，`not_applicable` 需理由及独立审阅。`actual_count` 是实际检查数；`metric` 明确真值 ULP、编码步距或其他指标，pass 行的 `limit/observed` 必须是同口径的非负有限预算及观测，且观测不超过预算；布尔语义检查可使用失败数预算 0。采样不证明全域上界。
 
+## 真值精度与双档证据（人工审查）
+
+沿用 schema 1、[现有证据类别](../core.py)与 `cases.csv`/`coverage.csv`；以下是[真值精度规约](accuracy-screening.md)的配套约定，并非 CLI 新的固定表格或自动验收器。
+
+- **G0/G1b：** 需要数学预算的 G3 行用 `metric=true-ulp`、`limit` 为该入口的最终契约值。若拟报告最终档位，预登记该档阈值验证：同一数值行用更严预算，或分别登记接口与档位，不能以较宽档覆盖接口预算。数值、语义、状态和 `encoding-step` 冒烟用不同 case。G0 约定各格分母和按输入组/实际调用路径（含适用 LTO）区分的 ID；数值行计应检查的有限 active 输出，不按重复窗口虚增覆盖。将冻结语料和 oracle 清单连同成员路径/SHA 归档并登记；G1b 用相应 freeze 键绑定清单文件。历史编码步距表不重标为 `true-ulp`。
+- **G2/G3：** 按候选/运行、`case_id` 或预登记筛选格、`sample_id` 及批次/lane 唯一定位冻结输入位型、oracle 包络端点/精度/异常、逐 lane 输出位型和语义/状态记录；注明实际 ELF/库、工具、命令和环境身份。oracle 端点须能按精确十六进制或等价有理数复算；`ref_bits`、舍入一致标志或一个 bin 不足以重建包络。结果保留每样本误差上下界、判定所用尺度、各适用阈值的结论与未决原因，并按契约单列异常、越界、零符号与 NaN 等，不能一律写为误差 0。专门的语义 case 可用其失败数、预算 0。
+- **聚合：** 通过的数值 `coverage.csv` 行用该格样本误差上界的最大值填 `observed`，若需十进制序列化须朝上外舍入，不用报告显示精度比较门槛。必测样本缺失、被重复样本替代或对该行预算未决时，保留逐样本或缺口记录，coverage 用 `fail` 或 `not_run` 并写原因，不能标 `not_applicable`。不在 schema 1 新增 `unresolved` coverage 状态。`evidence_id` 指向已登记的该格证据索引或数据，不能指向只含编码步距的结果。
+- **G5/G6：** 保留逐档合格候选、拒绝/未测理由、预算、已观测最大误差区间/上界与最坏样本 ID、独立复算、主与保护场景及最终决定。把必要证据文件在相应门禁登记为 `screening`、`raw`、`data`、`validation` 等现有类别，使身份进入审批摘要；仅存清单而未登记的成员由独立审查重算 SHA 并核对用例全集。适用域、真值算法/证明、逐样本比较、未决数及决策正确性不由通用 CLI 推断。
+
 ## consumer-lto.csv：消费者 LTO 配对
 
 交付或变更已安装自动向量化路径时，G0 冻结 `input_group=consumer-lto/<language>/<route>/<link>/<policy>` 的 G3 行，每个组合**一条计划行**，对应同一用例的两条结果 `lto=off/on`。未涉及该路径的项目可继续使用原矩阵；CLI 不读契约自然语言，G0 独立审查必须对账所有计划中的消费者与链接方式，确认没有整组漏登。新增 API 的 `new-api` 接口探针仍须单独登记。

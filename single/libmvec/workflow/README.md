@@ -4,6 +4,7 @@
 
 - [新增函数：16 格公共 ABI、glibc 与外层工具链集成路径](docs/glibc-integration.md)
 - [阶段、稳定编号清单与证据](docs/checklist.md)
+- [真值 ULP 验收和 1.0 / 3.5 ULP 双档筛选](docs/accuracy-screening.md)：G2 内部选型，G3 按最终接口契约复验；不自动改公共 ABI。
 - [角色、派工、审阅与 bug 模板](docs/roles-and-templates.md)
 - [工具边界、权限与恢复](docs/operation.md)
 - [证据 CSV schema 与检查边界](docs/evidence-schema.md)；已安装消费者的 LTO off/on 按 [G3 取证和登记](docs/operation.md#g3-已安装消费者-lto)办理，性能收益另验。

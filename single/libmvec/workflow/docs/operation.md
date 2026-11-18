@@ -52,6 +52,10 @@ python3 "$CLI" status --task "$TASK"
 
 详细参数、支持的证据类别和退出码以 `--help` 及当前实现为准：0 为成功、1 为门禁阻断、2 为输入或工具错误。缺少证据模块或格式未知时不得把输出当通过。工具生成的 CSV 是机器可读证据，不取代面向用户的 Markdown 报告。
 
+## G3 真值精度取证
+
+依[规约](accuracy-screening.md)先确认 oracle 能判适用函数和阈值，G0 冻结预算与矩阵，G1b 冻结实际语料和 oracle 清单。在已批准的带时间戳运行目录执行适用目标 ELF，归档输入位型、宿主真值包络、逐 lane 输出、状态/ABI 及判定表到 `data/`；各自登记，数值行以 `metric=true-ulp` 链接这些证据。现 CLI 不会计算真值或检查区间判定；独立审核原始证据并复算，缺失或未决的必测格不推进。现有只对标量 libm 的 selftest、性能冒烟 oracle 以及下节消费者 LTO CSV 均不能单独满足本项。使用新规约时在 G0 契约写明 workflow 版本并重审受影响阶段；仅更改文档不会让 CLI 自动识别历史证据口径变化。
+
 ## G3 已安装消费者 LTO
 
 先按 [schema](evidence-schema.md#consumer-ltocsv消费者-lto-配对)冻结适用用例。取外层工具链源码中支持 `--workflow-evidence` 的 `scripts/libmvec/test-autovec.py`，从**最终候选安装前缀**运行。调用者提供刚核验的发行 `SHA256SUMS`、对应组件/配方、配套 QEMU 和不存在的带时间戳运行输出；前缀在运行期间不可变。下例是一个 GCC C scoped smoke，不是批量全范围命令：
