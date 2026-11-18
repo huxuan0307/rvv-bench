@@ -2,6 +2,7 @@
 
 本目录定义需求、实现、验证、审阅和交付的统一流程；首版门禁工具只支持须完整经历正确性、ABI、库态性能和报告的 **full-development profile**，不提供仅正确性、仅报告或 G4 不适用的完整流程。它不是调度器，也不授权自动启动仿真、提交、推送或删除。正式代码修改只能在任务目录 `worktree/` 对应仓库内进行；任务记录和数据不应成为源码运行依赖。
 
+- [新增函数：16 格公共 ABI、glibc 与外层工具链集成路径](docs/glibc-integration.md)
 - [阶段、稳定编号清单与证据](docs/checklist.md)
 - [角色、派工、审阅与 bug 模板](docs/roles-and-templates.md)
 - [工具边界、权限与恢复](docs/operation.md)

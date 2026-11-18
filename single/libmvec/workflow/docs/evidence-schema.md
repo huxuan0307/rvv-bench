@@ -10,6 +10,8 @@ schema_version,case_id,gate,function,precision,interface,lmul,vlen,mask,frm,inpu
 
 `case_id` 是案例标识；`gate` 为 G3 或 G4；其余维度描述函数、精度、接口、LMUL、VLEN、mask、舍入和输入组。`required` 为 yes/no；非必测需说明 `reason`，并由独立评审判断。`expected_count` 对 G3 是规定检查数，对 G4 是规定窗口数；G4 `phases` 以 `first:数量;warmup:数量;steady:数量` 形式登记实际需要的相位。`metric` 与 `limit` 是误差指标及预算；G4 的 `unit` 和 `vector_required` 冻结统计单位及是否必须实际执行向量调用。规划文件和适用性须绑定契约与批准身份。
 
+新增公共标量函数或精度时，每个 `(function, precision)` 须在 G3 cases 以 `input_group=new-api` 预登记 ABI 探针。该组 `lmul=1|2|4|8`，`interface=fixed|variable`（variable 对应 glibc manifest 的 vla），`mask=masked|unmasked`。必须有 16 格；m1/m2 全 `required=yes`，m4/m8 未承诺项 `required=no` 且有理由，G3 coverage 仍保留对应行和真实状态。每格同 VLEN/frm 不重复；可另列其它 VLEN/frm，用不同输入组另验数值和 fallback。示例：f64 atan2，m2/variable/masked 对应 `_ZGV2Mxvv_atan2`。`new-api` 是任务契约声明；CLI 不解析标量名的业务含义，全部漏标或漏列整个函数须由 G0 独立审查抓出。矩阵校验不是符号表/链接/执行校验，后者按[集成路径](glibc-integration.md)逐格绑定。
+
 ## coverage.csv：正确性覆盖
 
 ```text

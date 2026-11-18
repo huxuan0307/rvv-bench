@@ -176,5 +176,116 @@ class EvidenceTests(unittest.TestCase):
         with self.assertRaises(ValueError): reporting.generate(self.task,self.task/"report"/"bad")
 
 
+class NewApiMatrixTests(unittest.TestCase):
+    """新函数 API 矩阵（input_group='new-api'）正负例；合成夹具。"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix="newapi-tests-", dir=os.environ.get("TEST_TMPDIR"))
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.count = 0
+
+    def build(self):
+        cases, coverage = [], []
+        for lmul, interface, mask in E.NEW_API_GRID:
+            required = "yes" if lmul in E.NEW_API_REQUIRED_LMULS else "no"
+            case = row(E.CASES, case_id=f"log-f64-m{lmul}-{interface}-{mask}", gate="G3", function="log", precision="f64",
+                       interface=interface, lmul=lmul, vlen="128", mask=mask, frm="RNE", input_group="new-api",
+                       required=required, reason="" if required == "yes" else "lmul4/8 按契约可选，见 G0-03",
+                       expected_count="1", metric="encoding-step", limit="1", vector_required="yes")
+            cases.append(case)
+            coverage.append(row(E.COVERAGE, **{k: case[k] for k in E.COVERAGE if k in case and k != "schema_version"},
+                                status="pass" if required == "yes" else "not_applicable",
+                                actual_count="1" if required == "yes" else "0",
+                                observed="0" if required == "yes" else "", evidence_id="raw-functional"))
+        return cases, coverage
+
+    def write(self, cases, coverage=None):
+        self.count += 1
+        task = self.root / f"task-{self.count}"
+        E.write_csv(E.root(task) / "cases.csv", E.CASES, cases)
+        if coverage is not None:
+            E.write_csv(E.root(task) / "coverage.csv", E.COVERAGE, coverage)
+        return task
+
+    def test_complete_matrix_passes_g0_and_g3(self):
+        cases, coverage = self.build()
+        task = self.write(cases, coverage)
+        self.assertEqual(E.check_task(task, "G0"), [])
+        self.assertEqual(E.check_task(task, "G3"), [])
+
+    def test_missing_cell_rejected(self):
+        cases, coverage = self.build()
+        del cases[0]
+        del coverage[0]
+        task = self.write(cases, coverage)
+        self.assertIn("漏格", " ".join(E.check_task(task, "G0")))
+        self.assertTrue(E.check_task(task, "G3"))
+
+    def test_duplicate_combo_rejected(self):
+        cases, coverage = self.build()
+        duplicate = copy.deepcopy(cases[0])
+        duplicate["case_id"] = "log-f64-duplicate"
+        cases.append(duplicate)
+        coverage.append(dict(coverage[0], case_id="log-f64-duplicate"))
+        task = self.write(cases, coverage)
+        self.assertIn("重复", " ".join(E.check_task(task, "G0")))
+
+    def test_required_policy(self):
+        cases, coverage = self.build()
+        for case in cases:
+            if case["lmul"] == "1":
+                case["required"] = "no"
+                case["reason"] = "合成负例"
+        task = self.write(cases, coverage)
+        self.assertIn("必须 required=yes", " ".join(E.check_task(task, "G0")))
+        cases, coverage = self.build()
+        for case in cases:
+            if case["lmul"] == "4":
+                case["required"] = "no"
+                case["reason"] = ""
+        task = self.write(cases, coverage)
+        self.assertTrue(E.check_task(task, "G0"))
+
+    def test_multiple_vlen_allowed_and_interface_enum(self):
+        cases, coverage = self.build()
+        extra = copy.deepcopy(cases[0])
+        extra["case_id"] = "log-f64-m1-fixed-masked-v256"
+        extra["vlen"] = "256"
+        cases.append(extra)
+        coverage.append(dict(coverage[0], case_id=extra["case_id"], vlen="256"))
+        task = self.write(cases, coverage)
+        self.assertEqual(E.check_task(task, "G0"), [])
+        self.assertEqual(E.check_task(task, "G3"), [])
+        cases[1]["interface"] = "Nx"
+        task = self.write(cases, coverage)
+        self.assertIn("interface", " ".join(E.check_task(task, "G0")))
+
+    def test_g4_cannot_claim_omitted_api(self):
+        cases, _ = self.build()
+        omitted = next(r for r in cases if r['lmul'] == '8')
+        perf = dict(omitted, gate='G4', required='yes')
+        self.assertIn('不是已承诺', ' '.join(E.check_task(self.write(cases + [perf]), 'G0')))
+
+    def test_precision_cannot_supply_another_precisions_missing_cell(self):
+        cases, _ = self.build()
+        cases[-1]['precision'] = 'f32'
+        self.assertIn('漏格', ' '.join(E.check_task(self.write(cases), 'G0')))
+
+    def test_legacy_and_g4_orphan(self):
+        legacy = row(E.CASES, case_id="exp-Nx", gate="G3", function="exp", precision="f64", interface="Nx",
+                     lmul="1", vlen="128", mask="none", frm="RNE", input_group="normal", required="yes",
+                     expected_count="1", metric="encoding-step", limit="1", vector_required="yes")
+        self.assertIsNone(E.validate_new_api_matrix([legacy]))
+        cases, coverage = self.build()
+        orphan = row(E.CASES, case_id="exp-f64-m1-fixed-unmasked", gate="G4", function="exp", precision="f64",
+                     interface="fixed", lmul="1", vlen="128", mask="unmasked", frm="RNE", input_group="new-api",
+                     required="yes", expected_count="1", phases="steady:1", unit="cycle/vector-element",
+                     vector_required="yes", metric="encoding-step", limit="1")
+        cases.append(orphan)
+        task = self.write(cases, coverage)
+        self.assertIn("缺少 G3 矩阵声明", " ".join(E.check_task(task, "G0")))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

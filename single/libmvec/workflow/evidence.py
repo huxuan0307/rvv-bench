@@ -21,6 +21,20 @@ ENV_KEYS = {"simulator_family", "simulator_sha256", "reference_sha256", "dram_sh
 STATUSES = {"pass", "fail", "skip", "not_run", "not_applicable"}
 TEMP_REF = re.compile(r"(?:^|[/\\\s(<`])(tmp|log|runs)(?:[/\\])", re.I)
 
+# 新函数 API 矩阵：只在 cases.csv 中 input_group='new-api' 的 G3 行出现时启用。
+# 老 profile（历史优化任务、未声明新增公开接口）不带此标记，行为完全不变；
+# 工具无法区分“本任务不是新增 API”与“忘了标记”，因此标记本身是 G0 契约
+# 义务，须由审查者核对（G0-01/G0-03），机器检查不能替代该判断。
+NEW_API_GROUP = "new-api"
+NEW_API_LMULS = ("1", "2", "4", "8")
+NEW_API_INTERFACES = ("fixed", "variable")
+NEW_API_MASKS = ("masked", "unmasked")
+NEW_API_REQUIRED_LMULS = {"1", "2"}
+NEW_API_GRID = tuple((lmul, interface, mask)
+                     for lmul in NEW_API_LMULS
+                     for interface in NEW_API_INTERFACES
+                     for mask in NEW_API_MASKS)
+
 
 def root(task):
     return Path(getattr(task, "dir", task)).resolve() / "data" / "workflow"
@@ -253,6 +267,83 @@ def evaluate_claims(claims, coverage, comparison):
     return outputs
 
 
+def validate_new_api_matrix(cases, gate=None):
+    """新函数 API 矩阵检查：只由 cases.csv 的 input_group='new-api' 触发。
+
+    触发与兼容性：
+    - 存在任意 input_group='new-api' 的 G3 cases 行时启用；无该标记时立即返回，
+      历史优化任务（旧 profile）不受影响。不引入任何旁表或隐式默认。
+    - 工具无法辨别“未声明新增 API”与“漏标”；标记是否真实完整属 G0 契约义务，
+      须由独立审查核对（G0-01 需求/矩阵、G0-03 验收预算），机器检查不替代。
+
+    每个 (function, precision) 群组必须正好覆盖 16 格：
+      lmul{1,2,4,8} × interface{fixed,variable} × mask{masked,unmasked}
+    - 漏格、同格同 vlen/frm 重复均拒；同一格允许按需登记多个 VLEN/frm
+      （每个新增行都必须有对应 G3 coverage，既有 coverage 集合检查保证）。
+    - lmul=1/2 必须 required=yes；lmul=4/8 可 required=no，但 reason 必填，
+      其适用性由独立评审判断。
+    - interface/mask 只接受上述词表；G4 的 new-api 行必须已有 G3 群组声明，
+      防止性能场景脱离预登记矩阵。
+    """
+    tagged = [row for row in cases if row["input_group"] == NEW_API_GROUP]
+    if not tagged:
+        return
+    g3 = [row for row in tagged if row["gate"] == "G3"]
+    g4 = [row for row in tagged if row["gate"] == "G4"]
+    if not g3:
+        raise ValueError("cases: new-api 只有 G4 行而缺少 G3 预登记矩阵")
+    groups = {}
+    for row in g3:
+        groups.setdefault((row["function"], row["precision"]), []).append(row)
+    for (function, precision), rows in groups.items():
+        if not function or not precision:
+            raise ValueError("cases: new-api 的 function/precision 不能为空")
+        cells = {}
+        for row in rows:
+            lmul, interface, mask = row["lmul"], row["interface"], row["mask"]
+            if lmul not in NEW_API_LMULS:
+                raise ValueError(
+                    f"{row['case_id']}: new-api lmul 仅支持 {NEW_API_LMULS}")
+            if interface not in NEW_API_INTERFACES:
+                raise ValueError(
+                    f"{row['case_id']}: new-api interface 仅 "
+                    f"{NEW_API_INTERFACES}")
+            if mask not in NEW_API_MASKS:
+                raise ValueError(
+                    f"{row['case_id']}: new-api mask 仅 {NEW_API_MASKS}")
+            if not row["vlen"]:
+                raise ValueError(f"{row['case_id']}: new-api 缺 vlen")
+            signature = (lmul, interface, mask, row["vlen"], row["frm"])
+            if signature in cells:
+                raise ValueError(
+                    f"{row['case_id']}: new-api 组合重复 {signature}")
+            cells[signature] = row
+            if row["required"] == "yes":
+                continue
+            if lmul in NEW_API_REQUIRED_LMULS:
+                raise ValueError(
+                    f"{row['case_id']}: new-api lmul={lmul} 必须 required=yes")
+            if not row["reason"]:
+                raise ValueError(
+                    f"{row['case_id']}: new-api lmul={lmul} 非必测缺理由")
+        present = {(cell[0], cell[1], cell[2]) for cell in cells}
+        missing = [cell for cell in NEW_API_GRID if cell not in present]
+        if missing:
+            raise ValueError(
+                f"{function}/{precision}: new-api 矩阵漏格 {sorted(missing)}")
+    declared = set(groups)
+    selected = {(r['function'], r['precision'], r['lmul'], r['interface'], r['mask'])
+                for r in g3 if r['required'] == 'yes'}
+    for row in g4:
+        key = (row["function"], row["precision"])
+        if key not in declared:
+            raise ValueError(
+                f"{row['case_id']}: G4 new-api 用例缺少 G3 矩阵声明 {key}")
+        cell = (*key, row['lmul'], row['interface'], row['mask'])
+        if cell[2:] not in NEW_API_GRID or (row['required'] == 'yes' and cell not in selected):
+            raise ValueError(f"{row['case_id']}: G4 new-api 性能场景不是已承诺的有效接口 {cell}")
+
+
 def validate_cases(cases, loaded, gate):
     unique(cases, ("gate", "case_id"), "cases")
     for row in cases:
@@ -303,6 +394,7 @@ def validate_cases(cases, loaded, gate):
                     raise ValueError(f"{key}: 统计单位偏离预登记矩阵")
                 if plan["vector_required"] == "yes" and any(int(r["vector_calls"]) == 0 for r in rows):
                     raise ValueError(f"{key}: 没有实际向量调用证据")
+    validate_new_api_matrix(cases, gate)
 
 
 def validate_artifact_references(task, loaded):
