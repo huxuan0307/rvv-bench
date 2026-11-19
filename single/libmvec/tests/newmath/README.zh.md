@@ -1,5 +1,7 @@
 # 七函数 array / Nx 正确性门禁
 
+本目录只保留说明；实际工具在 `../../script/accuracy/`，主机测试在 `../../tests/host/`。下文旧示例中的 `tests/newmath/*.py` 路径属于历史布局，不能直接执行。
+
 本脚本恢复并改造历史门禁，不构建或修改数学库。支持七函数、两个 LMUL 的完整历史 MPFR512 样本及语义测试；此版**未分片**，确保所有原 array 调用的长度、顺序及变长 chunk 相位保持不变。不得把本说明当成已经运行通过的证明。
 
 ## 输入一次物化，多库镜像共享
@@ -7,7 +9,7 @@
 准备一个显式输入目录，包含六个 gzip 格式的 `.dat`：`exp-unit.dat`、`expf-unit.dat`、`log-unit.dat`、`logf-unit.dat`、`trigvec-unit-data.dat`、`powvec_unit_data.dat`。解压字节的 SHA 必须与脚本内冻结值完全一致。准备命令只运行一次，不允许覆盖目标：
 
 ```sh
-python3 -B single/libmvec/tests/newmath/gate.py prepare \
+python3 -B single/libmvec/script/accuracy/gate.py prepare \
   --oracle-dir /绝对路径/压缩oracle \
   --headers-dir /绝对路径/共享oracle-headers
 ```
@@ -17,7 +19,7 @@ python3 -B single/libmvec/tests/newmath/gate.py prepare \
 ## 编译和运行
 
 ```sh
-python3 -B single/libmvec/tests/newmath/gate.py run \
+python3 -B single/libmvec/script/accuracy/gate.py run \
   --new-archive /绝对路径/libnewmath.a \
   --gcc /工具链/bin/riscv64-unknown-linux-gnu-gcc \
   --scalar-libm /绝对路径/libm-2.44.a \
@@ -38,7 +40,7 @@ python3 -B single/libmvec/tests/newmath/gate.py run \
 主机单测，无需 NEMU、目标库或 oracle：
 
 ```sh
-python3 -B single/libmvec/tests/newmath/test_gate.py
+python3 -B single/libmvec/tests/host/test_gate.py
 ```
 
 ## 断言和边界
@@ -54,18 +56,18 @@ python3 -B single/libmvec/tests/newmath/test_gate.py
 
 ## 五种 frm 的直接入口行为观察
 
-`frm_observe.py` 可将相同探针分别链接到原版和候选数学库，对单个函数的 Nx、array 和两个 LMUL 在五种合法 `frm` 下比较有限样本的输入、每 lane 输出位模式以及调用后的 `frm`、`fflags`、`errno`。每 case 预置 `fflags=0` 或 `NV|DZ`，同时预置 `errno=0` 或 89；检查 sticky 标志未丢失。样本包括普通值、边界、零、次正规、无穷、qNaN/sNaN 和轮转混合，输入组不是 MPFR oracle。`frm=0..4` 对应 RNE、RTZ、RDN、RUP、RMM。
+`script/accuracy/frm_observe.py` 可将相同探针分别链接到原版和候选数学库，对单个函数的 Nx、array 和两个 LMUL 在五种合法 `frm` 下比较有限样本的输入、每 lane 输出位模式以及调用后的 `frm`、`fflags`、`errno`。每 case 预置 `fflags=0` 或 `NV|DZ`，同时预置 `errno=0` 或 89；检查 sticky 标志未丢失。样本包括普通值、边界、零、次正规、无穷、qNaN/sNaN 和轮转混合，输入组不是 MPFR oracle。`frm=0..4` 对应 RNE、RTZ、RDN、RUP、RMM。
 
 Nx caller 只使用 **incoming vl=VLMAX**；虽然汇编也采样了 `vl/vtype/vstart` 和被调用者保存寄存器，直接观察器**没有检查或比较**这些采样，不能声称已证明 PCS。array 测试长度为 1、VLMAX−1、VLMAX、VLMAX+1 和 2×VLMAX+1（某些 VLMAX 下长度可能重复），Nx 每次一个 VLMAX。程序输出 `FRM_CONFIG` 记录实际 `vlenb`，主机逐键核对配置、长度、预期输入和所有 lane，并拒绝重复或缺失记录、单侧失败。主机单测可不运行 NEMU：
 
 ```sh
-python3 -B single/libmvec/tests/newmath/test_frm_observe.py
+python3 -B single/libmvec/tests/host/test_frm_observe.py
 ```
 
 构建示例；去掉 `--build-only` 并显式指定 `--nemu` 后才会执行目标，事先须获得仿真授权。每次必须给两个互不包含的全新目录，测试工作目录和临时文件须带日期时间，且路径不含 `build`：
 
 ```sh
-python3 -B single/libmvec/tests/newmath/frm_observe.py run \
+python3 -B single/libmvec/script/accuracy/frm_observe.py run \
   --function log --archive /绝对路径/libnewmath.a \
   --gcc /工具链/bin/riscv64-unknown-linux-gnu-gcc \
   --scalar-libm /绝对路径/libm-2.44.a \
@@ -77,7 +79,7 @@ python3 -B single/libmvec/tests/newmath/frm_observe.py run \
 分别构建并获准运行之后，以各自**原始**运行记录执行离线对比（示例为原版对候选）：
 
 ```sh
-python3 -B single/libmvec/tests/newmath/frm_observe.py compare --function log \
+python3 -B single/libmvec/script/accuracy/frm_observe.py compare --function log \
   --before /原运行/logs/nemu.stdout --before-stderr /原运行/logs/nemu.stderr \
   --before-commands /原运行/commands.csv \
   --after /候选运行/logs/nemu.stdout --after-stderr /候选运行/logs/nemu.stderr \

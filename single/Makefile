@@ -63,7 +63,7 @@ build/veclibm-obj/%.o: $(VECLIBM_SRC_DIR)/%.c $(wildcard $(VECLIBM_INC_DIR)/*.h)
 	@echo "  CC    $@"
 	@${CC} $(VECLIBM_CFLAGS) -c -o $@ $<
 
-build/veclibm-runtime.o: veclibm-runtime.c ../autovec/av_runtime.c ../autovec/av_runtime.h Makefile ../config.mk
+build/veclibm-runtime.o: common/am_runtime.c ../autovec/av_runtime.c ../autovec/av_runtime.h Makefile ../config.mk
 	@mkdir -p $(@D)
 	@${CC} $(VECLIBM_CFLAGS) -fno-tree-vectorize -c $< -o $@
 

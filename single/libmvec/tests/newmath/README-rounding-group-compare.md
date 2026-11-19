@@ -1,15 +1,17 @@
 # 五种 frm 观察结果的组级比较
 
+实际工具位于 [`script/accuracy/rounding_group_compare.py`](../../script/accuracy/rounding_group_compare.py)，主机测试在 [`tests/host/test_rounding_group_compare.py`](../../tests/host/test_rounding_group_compare.py)。
+
 此独立工具对两个**已经完成分析**的七函数舍入观察结果进行配对比较。它不修改、导入或执行历史观察器，不要求用新观察器重新分析历史 run，也不启动目标仿真。原有 `rounding_accuracy.py compare` 的 CLI 和结果不变。本工具使用 Python 3 标准库，无额外 Python 依赖。
 
 ## 输入与完整性
 
-输入分别是 baseline 和 candidate 的分析目录，要求包含原观察器生成的 `COMPLETE.csv` 和五个结果文件。工具：
+输入分别是 baseline 和 candidate 的分析目录，要求包含原观察器生成的 `COMPLETE.csv` 和五个结果文件；新版 COMPLETE 若带 `execution_sha256`，还核对 `execution.csv`。工具：
 
 1. 严格核对两个 COMPLETE 的字段和 `lanes.csv.gz`、`groups.csv.gz`、`summary.csv`、`paired.csv`、`coverage.csv` 各自的 SHA-256；要求角色分别为 baseline/candidate、函数和顺序相同、archive SHA 不同，且 environment 与 observer SHA 相同。
 2. 依据双方相同的 coverage 和 VLENB，按观察器的顺序及分组规则对齐每个函数、接口、LMUL、frm、样本类型及 group ID，并检查 `n`、真实 lane 数 `emitted`、incoming VL、corpus 分组和语义分组。根据第一块 Nx 语义组推导语义数，再检查其余组及不同模式的一致性。
 3. 流式读取两侧 lane 数据，严格核对样本 ID 和五个模式的顺序；对每一个样本检查两侧及五模式之间的 `x_bits`、`z_bits` 和 `ref_bits` 一致。单目函数的 `z_bits` 与语义样本的 `ref_bits` 必须为空。输出同时按作用域计数 `y_bits` 的差异。
-4. 逐组比较调用返回后的 `frm_after`、组级 `fflags` 和 `errno`。任意缺失、重复、顺序或组身份不一致均拒绝；发布前重新核对两份 COMPLETE、五个文件和本比较器的 SHA。分析量大，数据按行流式读取，不会把全部 lane 载入内存。
+4. 逐组比较调用返回后的 `frm_after`、组级 `fflags` 和 `errno`。任意缺失、重复、顺序或组身份不一致均拒绝；发布前重新核对两份 COMPLETE、五个文件（新版再加 `execution.csv`）和本比较器的 SHA。分析量大，数据按行流式读取，不会把全部 lane 载入内存。
 
 这是对 COMPLETE 声称已核验的结果进行进一步配对，**不重新执行旧观察器，也不重新解析原始 NEMU stdout/stderr 或验证模拟器执行**。SHA 是文件身份与防止意外变化的校验，不是签名或防伪证明；它不能发现采集阶段串口传输本身发生、之后又被正常登记的错误。Nx 补齐 lane 不在 `lanes.csv.gz` 中：其内容正确性依赖历史观察器对原始 UART 的校验；此工具只复核组大小、有效 lane 和导出的真实输入，不能独立复验补齐值。
 
@@ -18,11 +20,11 @@
 以下路径应指向此前已授权、名称含日期时间且不位于任何 `build` 路径的独立运行目录。比较结果及两个日志放在 baseline 的运行目录下；输出文件必须不存在：
 
 ```sh
-SRC=/nfs/home/huxuan/repos/riscv-gnu-toolchain/.dsh/experiments/20261114-1646-sevenmath/source/single/libmvec/tests/newmath
+SRC=/nfs/home/huxuan/repos/riscv-gnu-toolchain/.dsh/experiments/20261114-1646-sevenmath/source/single/libmvec
 BASE_RUN=/替换为已有的日期时间-baseline运行目录
 CAND_RUN=/替换为已有的日期时间-candidate运行目录
 (cd "$BASE_RUN" && TMPDIR="$BASE_RUN/tmp" TMP="$BASE_RUN/tmp" TEMP="$BASE_RUN/tmp" \
-  PYTHONDONTWRITEBYTECODE=1 python3 "$SRC/rounding_group_compare.py" \
+  PYTHONDONTWRITEBYTECODE=1 python3 "$SRC/script/accuracy/rounding_group_compare.py" \
   --baseline "$BASE_RUN/analysis" --candidate "$CAND_RUN/analysis" \
   --output "$BASE_RUN/analysis/group-comparison.csv" \
   >"$BASE_RUN/group-compare.stdout" 2>"$BASE_RUN/group-compare.stderr")
@@ -51,7 +53,7 @@ RUN=/替换为尚不存在的日期时间-host测试运行目录
 [ ! -e "$RUN" ] || exit 1
 mkdir -p "$RUN/tmp"
 (cd "$RUN" && TMPDIR="$RUN/tmp" TMP="$RUN/tmp" TEMP="$RUN/tmp" \
-  PYTHONDONTWRITEBYTECODE=1 python3 "$SRC/test_rounding_group_compare.py" \
+  PYTHONDONTWRITEBYTECODE=1 python3 "$SRC/tests/host/test_rounding_group_compare.py" \
   >"$RUN/stdout" 2>"$RUN/stderr")
 ```
 

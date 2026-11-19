@@ -1,15 +1,30 @@
 # 五舍入模式的 MPFR 区间误差主机分析
 
-[mpfr_accuracy.py](mpfr_accuracy.py) 对**已有的真实目标逐 lane 输出**进行离线分析；它不构建、不运行或模拟目标程序，也不从 RNE 编码距离推断相对于数学真值的误差。`corpus_C` 和 `semantic_S_unvalidated` 严格分开：前者是指定冻结语料；后者只是语义观察样本，其样本覆盖并未由本工具验收。
+实际工具位于 [`script/accuracy/mpfr_accuracy.py`](../../script/accuracy/mpfr_accuracy.py)，本目录只保留说明。旧示例中的 `tests/newmath/mpfr_accuracy.py` 与 `tests/newmath/test_mpfr_accuracy.py` 路径属于历史布局。
+
+[mpfr_accuracy.py](../../script/accuracy/mpfr_accuracy.py) 对**已有的真实目标逐 lane 输出**进行离线分析；它不构建、不运行或模拟目标程序，也不从 RNE 编码距离推断相对于数学真值的误差。`corpus_C` 和 `semantic_S_unvalidated` 严格分开：前者是指定冻结语料；后者只是语义观察样本，其样本覆盖并未由本工具验收。
 
 ## 环境与输入
 
 - Python 3 标准库和主机 MPFR/GMP 共享库；不需要 `mpmath` 或 `gmpy2`。当前已验证：x86-64 Linux、Python 3.12.3、MPFR 4.2.1、`libmpfr.so.6`。
 - ctypes 绑定依赖**经过验证的标准 LP64 MPFR/GMP ABI**（指针和 C `long` 为 64 位）。这不是对其他平台、定制构建或任意 `--mpfr-library` 的 ABI 兼容性声明；两个类型的宽度检查不能证明所有 ABI 配置兼容。使用不同环境前必须独立验证其 MPFR/GMP ABI 和数值结果。
 - 文件可以是 CSV、`.csv.gz`，或经 stdin 提供 CSV（`-`）。gzip 文件记录压缩文件的 SHA256；stdin 标注 `stdin-unavailable`，不能用作输入字节身份的证明。
-- 表头严格为 `function,interface,lmul,sample_id,frm,x_bits,z_bits,y_bits,ref_bits`，末尾可选 `rne_ref_ulp`（空或无符号十进制，仅校验格式，不参与真值计算）。`function` 为七函数名；`interface` 为 `Nx`/`array`；`lmul` 为 `1`/`2`；`frm` 为 0–4 或 RNE、RTZ、RDN、RUP、RMM。`x_bits`、`z_bits`、`y_bits`、`ref_bits` 为精确的目标格式位串：binary32 恰好 8 位十六进制，binary64 恰好 16 位，允许 `0x` 前缀。一元函数 `z_bits` 为空；`pow` 的 `z_bits` 为第二输入。`ref_bits` 是冻结的目标格式 RNE 参考位，**不是高精度真值**。
+- 采集 CSV 表头严格为 `function,interface,lmul,sample_id,frm,x_bits,z_bits,y_bits,ref_bits`，末尾可选 `rne_ref_ulp`（空或无符号十进制，仅校验格式，不参与真值计算）。默认分析原七函数；四函数须显式用 `--functions` 选择。`interface` 为 `Nx`/`array`；`lmul` 为 `1`/`2`；`frm` 为 0–4 或 RNE、RTZ、RDN、RUP、RMM。位字段为恰好 8 位（binary32）或 16 位（binary64）十六进制，可有 `0x` 前缀。一元函数 `z_bits` 为空；`pow` 与 `atan2` 的 `x_bits,z_bits` 分别按第一、第二输入顺序，`atan2` 即 `y,x`。采集表的 `y_bits` 是输出。`ref_bits` 是冻结的目标格式 RNE 参考位，**不是高精度真值**。
 - 相同 `(function,interface,lmul,sample_id)` 必须五行相邻，且恰好各出现一种 `frm`，输入和参考位完全相同。同一 `(function,interface,lmul)` 的所有 ID 形成一个不可重开的连续块。语料 ID 为 `C0`、`C1` 等，从零起覆盖所选 profile 的整个冻结范围；语义 ID 为 `S<组号>:<lane号>`，其 `ref_bits` 必须为空。不得重复 ID、缺 ID、缺某个预期块或提供空输入。各块必须覆盖由 `--functions`、`--interfaces`、`--lmuls` 确定的笛卡尔积；缩小选项只代表缩小后的实验范围。
-- `--profile unit` 使用七函数冻结单元 oracle 的各自总数；`--profile perf` 每函数使用 1024 条性能输入。`--oracle-dir` 必须显式指向相应冻结头目录。工具检查冻结头硬编码 SHA256，并对每个 `C` ID 逐条核对 x/z/ref；错误或缺失则失败。性能输入范围较窄，不能把其结果推广到单元语料或数学全域。`S` 样本不参与语料完整性或参考匹配合格率。
+- `--profile unit` 使用各函数的冻结单元 oracle；四函数每个头 1024 条。`--profile perf` 仅支持原七函数，每函数 1024 条性能输入。`--oracle-dir` 必须显式指向相应冻结头目录。工具核对冻结头 SHA256 和每个 `C` ID 的 x/z/ref；错误或缺失则失败。性能输入范围较窄，不能把结果推广到单元语料或数学全域。上述五模式比较中，`S` 样本不计入语料完整性或参考匹配合格率。
+- `--profile unit --samples N --max-ulp T` 选择限额 RNE 真值门禁，替代上述五模式分组规则。每组 `C<i>` 映射到原头的 `i * total // N`；`S` 的真值也逐条判定，但覆盖须由采集验收证明。使用 `--capture-complete` 核对采集工具对 CSV 的完成凭据，四函数实验选择 `--interfaces Nx --lmuls 1,2`。只有区间误差上界 `U ≤ T` 才可通过；`L > T` 失败，未决也阻止验收。
+
+## 复现四函数冻结 RNE 参考头
+
+生成模式与上面的五舍入模式分析相互独立。它为 atan、atan2、acos、log10 读取调用者提供的冻结 CSV，并对每个样本计算唯一可证明的 binary64 RNE 位。CSV 表头为 `function,idx,class,y_bits,x_bits`；`idx` 是各函数内唯一的非负原始编号，不用于重排；先取 `class=special` 再取 `class=random`，两类都保持 CSV 内相对顺序，截取前 `--count` 条（默认 1024）。位字段为 16 位十六进制；一元函数取 `x_bits`（`y_bits` 可空），atan2 按 `atan2(y_bits,x_bits)` 算真值。
+
+```sh
+python3 -B single/libmvec/script/accuracy/mpfr_accuracy.py --generate-headers \
+  --inputs "$FROZEN_CSV" --outdir "$NEW_ORACLE_DIR" \
+  --functions atan,atan2,acos,log10 --count 1024
+```
+
+输出目录必须不存在。工具先求证所有参考，再写各头并输出样本数与 SHA256；未决不写输出。参照[受版本控制的 oracle 头](../accuracy/oracles/)核对 SHA，并记录源 CSV 的 SHA。这个模式不凭空恢复历史语料，也不对目标实现作验收。[限额 Nx RNE 构建与分析入口](../README.md)与配对计时的有限值输入是不同的数据集。
 
 ## 数值方法
 
@@ -47,7 +62,7 @@ REFERENCE_MISMATCH,function,interface,lmul,sample_id,status,x_bits,z_bits,ref_bi
 ```sh
 E=/absolute/path/to/experiment
 SRC="$E/source/single/libmvec"
-python3 -B "$SRC/tests/newmath/mpfr_accuracy.py" /absolute/path/lanes.csv.gz \
+python3 -B "$SRC/script/accuracy/mpfr_accuracy.py" /absolute/path/lanes.csv.gz \
   --oracle-dir "$E/inputs/oracle-headers" --profile unit \
   --functions sin,cos,log,logf,exp,expf,pow \
   --interfaces Nx,array --lmuls 1,2 >summary.csv 2>analysis.stderr
@@ -58,7 +73,7 @@ python3 -B "$SRC/tests/newmath/mpfr_accuracy.py" /absolute/path/lanes.csv.gz \
 主机单元测试（不运行目标仿真）：
 
 ```sh
-python3 -B "$SRC/tests/newmath/test_mpfr_accuracy.py" -v
+python3 -B "$SRC/tests/host/test_mpfr_accuracy.py" -v
 ```
 
 测试涵盖 256/512 位区间嵌套、七函数冻结 perf 首样本参考、sin/cos 最大有限输入、pow 负底非整数、次正规/零、MPFR 极端范围、完整分块及缺样本、gzip 解码、全部参考 mismatch 记录与非零退出。测试中复制参考位以构造的五模式输出仅用于验证分析流程，不是目标模式精度数据。

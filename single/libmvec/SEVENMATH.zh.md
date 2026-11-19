@@ -2,6 +2,16 @@
 
 此说明对应 2026-11-14 的独立实验：数学库构建仅准备 log，不启动 gsim/Verilator。七函数性能框架可选择函数和 N/K；九模式、十轮（first 1、warmup 2、steady 7）固定，CSV v2 按九模式轮转。此处不是全数学语义、向量 PCS、RTL 性能的验收声明。所有脚本均需 Python 3.10+；交叉编译需显式提供同一 GCC 安装前缀、运行时库、源树及冻结输入，主机审计和生成输入所需的独立依赖由调用者显式准备。
 
+> 状态：**历史实验方法记录（2026-11-14）**，不是当前入口。本文中的 `math/`、`tests/newmath/` 和
+> `$SRC/build.py` 等路径属于旧布局，命令不能直接执行；保留本文是为了记录当时的方法和契约。当前入口见
+> [README.zh.md](README.zh.md) 与 [TOOLS.zh.md](TOOLS.zh.md)，精度工具的当前路径在 `script/accuracy/`。
+>
+> 路径迁移：旧 `$SRC/math/build.py` 与 `math/` 无当前等价（旧算法构建见
+> `script/build_oldarchive.py --source oldarchive`，CLI/语义不同）；旧 `$SRC/build.py` 对应
+> `script/build.py`；旧 `$SRC/run.py`、
+> `collect.py`、`build_trace.py`、`run_trace_*.py` 对应 `script/` 下同名脚本；旧 `$SRC/test_*.py`
+> 对应 `tests/host/`。以各脚本 `--help` 为准。
+
 ## 不可违反的目录约束
 
 构建输出置于独立实验 `build/`；**不得在任何 build 路径执行测试**。每次模拟、staging、工作目录、模拟器临时文件和日志均放独立的、名称含 `YYYYMMDD-HHMMSS` 的运行目录；stdout/stderr 分开。运行器的 `--output` 必须是不存在的新日期目录，且不得位于 build 目录。工具路径通过参数显式给出，不自动寻找旧任务；禁止自动恢复已停止测试。正式 RTL 仿真是否启动由协调者决定。
@@ -11,6 +21,7 @@
 本次明确测试工具前缀为 `/nfs/share/huxuan/riscv-gnu-toolchain-gcc16.1.0-20261109-142438-6ba7795932e0-libmvec`。操作示例从非 build 目录执行；每个新输出的父目录必须存在且目标本身不存在：
 
 ```sh
+# 历史命令（旧布局，不能直接执行）：
 E=/absolute/path/to/experiment
 PREFIX=/absolute/path/to/gcc-install-prefix
 SRC="$E/source/single/libmvec"
@@ -37,11 +48,11 @@ NEMU=/absolute/path/to/riscv64-nemu-interpreter
 DRIVER="$E/runs/$(date +%Y%m%d-%H%M%S)-manual-driver"
 mkdir "$DRIVER"
 RUN="$E/runs/$(date +%Y%m%d-%H%M%S)-log-baseline-nemu"
-(cd "$DRIVER" && python3 -B "$SRC/run.py" nemu \
+(cd "$DRIVER" && python3 -B "$SRC/script/run.py" nemu \
   --manifest "$E/build/log-baseline-n16-nx-nolto/manifest.json" \
   --nemu "$NEMU" --output "$RUN" --jobs 1 --max-instr 500000000 --timeout 180s \
   >nemu.stdout.log 2>nemu.stderr.log)
-(cd "$DRIVER" && python3 -B "$SRC/collect.py" --run "$RUN" --require-complete \
+(cd "$DRIVER" && python3 -B "$SRC/script/collect.py" --run "$RUN" --require-complete \
   >collect.stdout.log 2>collect.stderr.log)
 ```
 
@@ -51,13 +62,13 @@ RUN="$E/runs/$(date +%Y%m%d-%H%M%S)-log-baseline-nemu"
 
 ```sh
 RUN="$E/runs/$(date +%Y%m%d-%H%M%S)-log-baseline-gsim"
-(cd "$DRIVER" && python3 -B "$SRC/run.py" gsim \
+(cd "$DRIVER" && python3 -B "$SRC/script/run.py" gsim \
   --manifest "$E/build/log-baseline-n16-nx-nolto/manifest.json" \
   --output "$RUN" --case perf-log --jobs 1 --timeout 48h \
   --emu /absolute/path/to/nonstatic-gsim --reference /absolute/path/to/refmodel.so \
   --dramsim3-ini /absolute/path/to/XiangShan.ini \
   >gsim.stdout.log 2>gsim.stderr.log)
-(cd "$DRIVER" && python3 -B "$SRC/collect.py" --run "$RUN" --require-complete \
+(cd "$DRIVER" && python3 -B "$SRC/script/collect.py" --run "$RUN" --require-complete \
   >gsim-collect.stdout.log 2>gsim-collect.stderr.log)
 ```
 
@@ -70,11 +81,11 @@ RUN="$E/runs/$(date +%Y%m%d-%H%M%S)-log-baseline-gsim"
 ## 短 trace
 
 ```sh
-python3 -B "$SRC/build_trace.py" --build "$E/build/log-baseline-n16-nx-nolto" \
+python3 -B "$SRC/script/build_trace.py" --build "$E/build/log-baseline-n16-nx-nolto" \
   --data-dir "$INPUT" --output "$E/build/log-baseline-trace-nx-nolto" \
   --case log --mode auto_m2 --mode direct_m2 --k 1 --offset 0
 TRACE_RUN="$E/runs/$(date +%Y%m%d-%H%M%S)-trace-baseline-nemu"
-(cd "$DRIVER" && python3 -B "$SRC/run_trace_nemu.py" \
+(cd "$DRIVER" && python3 -B "$SRC/script/run_trace_nemu.py" \
   --manifest "$E/build/log-baseline-trace-nx-nolto/trace-manifest.json" \
   --nemu "$NEMU" --output "$TRACE_RUN" \
   >trace.stdout.log 2>trace.stderr.log)
@@ -86,7 +97,7 @@ TRACE_RUN="$E/runs/$(date +%Y%m%d-%H%M%S)-trace-baseline-nemu"
 
 ```sh
 TRACE_BATCH="$E/runs/$(date +%Y%m%d-%H%M%S)-log-trace-verilator"
-(cd "$DRIVER" && python3 -B "$SRC/run_trace_verilator.py" \
+(cd "$DRIVER" && python3 -B "$SRC/script/run_trace_verilator.py" \
   --trace "baseline=$E/build/log-baseline-trace-nx-nolto/trace-manifest.json" \
   --trace "cold=$E/build/log-cold-trace-nx-nolto/trace-manifest.json" \
   --trace "lifetime=$E/build/log-lifetime-trace-nx-nolto/trace-manifest.json" \
@@ -96,12 +107,12 @@ TRACE_BATCH="$E/runs/$(date +%Y%m%d-%H%M%S)-log-trace-verilator"
   >verilator.stdout.log 2>verilator.stderr.log)
 ```
 
-实际执行 `-b 0 -e 30000 -C 100000`、差分、独立 FST 和提交 trace；每 case 及批次的 `result.csv`/`results.csv` 包含状态、退出码、超时、SHA、trace 记录、真实 Core0 GOOD TRAP、FST 大小及 SHA。只有 rc=0、唯一完整 `TRACE_RESULT` 且 failed=0、周期记录一致、Core0 GOOD TRAP、FST 非空、无错误及 SHA 无变化才 passed；缺行或截断不得判成功。已检查的旧 cos 波形日志只有 GOOD TRAP、没有 `TRACE_RESULT`，按新规则必须失败，不能冒充现有新 trace 的通过证据。主机测试为 `python3 -B "$SRC/test_trace_verilator.py"`，应在日期运行目录运行并将 stdout/stderr 分开。
+实际执行 `-b 0 -e 30000 -C 100000`、差分、独立 FST 和提交 trace；每 case 及批次的 `result.csv`/`results.csv` 包含状态、退出码、超时、SHA、trace 记录、真实 Core0 GOOD TRAP、FST 大小及 SHA。只有 rc=0、唯一完整 `TRACE_RESULT` 且 failed=0、周期记录一致、Core0 GOOD TRAP、FST 非空、无错误及 SHA 无变化才 passed；缺行或截断不得判成功。已检查的旧 cos 波形日志只有 GOOD TRAP、没有 `TRACE_RESULT`，按新规则必须失败，不能冒充现有新 trace 的通过证据。主机测试为 `python3 -B "$SRC/tests/host/test_trace_verilator.py"`，应在日期运行目录运行并将 stdout/stderr 分开。
 
 ## 主机小测试
 
 ```sh
-(cd "$DRIVER" && python3 -B "$SRC/test_sevenmath_infra.py" >host.stdout.log 2>host.stderr.log)
+(cd "$DRIVER" && python3 -B "$SRC/tests/host/test_sevenmath_infra.py" >host.stdout.log 2>host.stderr.log)
 ```
 
 测试覆盖七函数的模式映射、九模式十轮轮转、N/K 网格的边界和运行目录规则，不替代交叉编译及 NEMU/RTL。

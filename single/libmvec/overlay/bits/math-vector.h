@@ -38,4 +38,15 @@
 # define __DECL_SIMD_sinf RVV_BENCH_NX_ONLY
 # define __DECL_SIMD_cosf RVV_BENCH_NX_ONLY
 # define __DECL_SIMD_powf RVV_BENCH_NX_ONLY
+/* The downstream glibc also advertises the vector entries of log10/atan/
+   atan2/acos; the throughput harness declares them NX-only too so the auto_m1/
+   auto_m2 columns really measure compiler-generated Nx calls. */
+# undef __DECL_SIMD_log10
+# undef __DECL_SIMD_atan
+# undef __DECL_SIMD_atan2
+# undef __DECL_SIMD_acos
+# define __DECL_SIMD_log10 RVV_BENCH_NX_ONLY
+# define __DECL_SIMD_atan RVV_BENCH_NX_ONLY
+# define __DECL_SIMD_atan2 RVV_BENCH_NX_ONLY
+# define __DECL_SIMD_acos RVV_BENCH_NX_ONLY
 #endif

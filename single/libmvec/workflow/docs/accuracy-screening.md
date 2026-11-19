@@ -59,8 +59,8 @@
 
 | 工具版本 | 可用范围 |
 |---|---|
-| 本分支的[五模式分析器](<../../tests/newmath/mpfr_accuracy.py>)与[说明](<../../tests/newmath/README-mpfr-accuracy.md>) | 仅支持 `sin/cos/log/logf/exp/expf/pow` 的旧采集格式。`(2,4]` 分箱不能判 3.5；参考位无 mismatch 也不是精度门禁通过。 |
-| `refactor/libmvec-layout@4f5f5f93bafbc7f6781e37037eb64c60f9e4272b`（独立工具分支） | `git show 4f5f5f9:single/libmvec/tests/README.md` 可查看 `run → analyze → MPFR` 完整命令。限额 RNE 采集支持原七函数 Nx/array × m1/m2；`atan/atan2/acos/log10` 使用该版本指定的冻结头，采集加 `--nx-only`，判定用 `--interfaces Nx`，仅覆盖无掩码的 Nx m1/m2。四函数采集入口已有交叉链接验证，不能据此声称 NEMU 数值实跑通过。 |
+| [五模式分析器](<../../script/accuracy/mpfr_accuracy.py>)与[说明](<../../tests/newmath/README-mpfr-accuracy.md>) | `(2,4]` 分箱不能判 3.5；参考位无 mismatch 也不是精度门禁通过。 |
+| [限额 RNE 采集与真值门禁](<../../tests/README.md>) | `run → analyze → MPFR` 支持原七函数 Nx/array × m1/m2。`atan/atan2/acos/log10` 使用固定 SHA 的冻结头，采集加 `--nx-only`，判定用 `--interfaces Nx`，仅覆盖无掩码 Nx m1/m2。交叉链接验证不等于 NEMU 数值实跑或 ABI 验收。 |
 
 严格 RNE 工具链不会自动覆盖定长、masked、其他 `frm` 或最终安装库/消费者 LTO；未覆盖的必测格须另做真实采集及独立验收。该判定器默认输出按 scope 与语料类别汇总的 CSV 和逐条失败/未决诊断，不是全量逐样本误差表；正式归档还需按[证据约定](<evidence-schema.md#真值精度与双档证据人工审查>)补齐逐样本界与尺度及可复算来源。不要改表头或字段把旧编码步距导入为 `true-ulp`。
 

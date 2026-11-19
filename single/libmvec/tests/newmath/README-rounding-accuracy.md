@@ -1,5 +1,7 @@
 # 七函数五种 frm 的完整 corpus 观察器
 
+实际工具位于 [`script/accuracy/rounding_accuracy.py`](../../script/accuracy/rounding_accuracy.py)，主机测试在 [`tests/host/test_rounding_accuracy.py`](../../tests/host/test_rounding_accuracy.py)；下文示例中的 `tests/newmath` 路径属于历史布局。
+
 本工具只观察直接入口的五种合法 `frm`：0=RNE，1=RTZ，2=RDN，3=RUP，4=RMM。工具**不要求内核一律使用 RNE**，也不自动判定是否需要强制 RNE。目标输出可供独立的 MPFR 高精度真值分析器使用；本工具所称距离严格是**与 RNE 舍入参考值的 ULP 距离**。该参考是历史 MPFR512 区间约定先舍入到目标格式的位模式，而不是未舍入的数学真值；非 RNE 结果即使离这个位模式更近（或更远），也不能单凭此断言其对数学真值更准确（或更不准确），更不能当作 directed 模式正确舍入的证明。
 
 ## 范围与历史分组
@@ -16,14 +18,14 @@
 
 ```sh
 E=/nfs/home/huxuan/repos/riscv-gnu-toolchain/.dsh/experiments/20261114-1646-sevenmath
-SRC="$E/source/single/libmvec/tests/newmath"
+SRC="$E/source/single/libmvec"
 GCC=/nfs/share/huxuan/riscv-gnu-toolchain-gcc16.1.0-20261109-142438-6ba7795932e0-libmvec/bin/riscv64-unknown-linux-gnu-gcc
 LIBM=/nfs/share/huxuan/riscv-gnu-toolchain-gcc16.1.0-20261109-142438-6ba7795932e0-libmvec/sysroot/usr/lib64/lp64d/libm-2.44.a
 ARCHIVE="$E/build/log-lifetime-math-nolto/libnewmath.a"
 DRIVER="$E/runs/20261114-181000-rounding-driver"
 mkdir -p "$DRIVER/tmp"
 (cd "$DRIVER" && TMPDIR="$DRIVER/tmp" TMP="$DRIVER/tmp" TEMP="$DRIVER/tmp" \
-  PYTHONDONTWRITEBYTECODE=1 python3 "$SRC/rounding_accuracy.py" run \
+  PYTHONDONTWRITEBYTECODE=1 python3 "$SRC/script/accuracy/rounding_accuracy.py" run \
   --gcc "$GCC" --archive "$ARCHIVE" --scalar-libm "$LIBM" \
   --headers-dir "$E/inputs/oracle-headers" --role candidate --functions log \
   --build-dir "$E/build/20261114-181000-rounding-build" \
@@ -33,13 +35,15 @@ mkdir -p "$DRIVER/tmp"
 
 构建所有函数省略 `--functions`；构建产物为 `build-dir/<函数>/accuracy.elf`、`.bin` 和 `.map`。每函数先链接发现 ELF 的 errno TLS 符号偏移，再以该偏移重新编译/链接，并通过 readelf 复核最终 ELF 的偏移未变。运行时在首次写 errno 之前核对 `tp == __tls_base == anchor 地址`、anchor 值和 errno 地址，失败输出 `RA_ERROR` 并退出；分析器还把 `RA_TLS` 行的实际/预期偏移与最终 ELF 的 readelf 结果交叉校验。程序每次要求新建构建/运行目录，绝不自动覆盖；所有命令 cwd、stdout/stderr 和 TMP 在 run-dir 下，编译输出仅进入 build-dir；staging 中的 bin 有独立 SHA。进程状态、NEMU stdout/stderr 的字节数和 SHA 及命令路径见 `commands.csv`，源码/输入/工具/ELF/bin 的 SHA 见 `identities.csv`。源码、语义表源、oracle、数学 archive、运行时依赖、ELF/bin 及脚本说明均复制到 `snapshot/` 并复核哈希；分析器可从快照读取 oracle 和语义源。外部 GCC、readelf、objcopy、NEMU、系统静态库的内容**不复制**，分析时仍需可通过记录的原绝对路径读取且哈希不变；若需脱机复验，应自行额外归档它们和路径/版本记录，并妥善保留 runs 整棵目录。`--build-only` 的 `plan.csv` 标记为仅构建，**不能分析为已仿真**。`--help` 安全，不启动仿真。
 
+当前 RNE 限额路径：`run --samples N` 对每函数确定性抽取 N 条冻结输入、只采 RNE；四函数 atan/atan2/acos/log10 必须再显式加 `--nx-only`，只采真实 Nx m1/m2，不伪造 array。七函数默认路径仍为全量五模式或 `--samples` RNE，行为不变。
+
 主机单测需按本项目约束使用独立带日期的运行目录（下方目录应为新目录），TMP、stdout 和 stderr 均在其中：
 
 ```sh
 RUN="$E/runs/20261114-181100-rounding-host-tests"
 mkdir -p "$RUN/tmp"
 (cd "$RUN" && TMPDIR="$RUN/tmp" TMP="$RUN/tmp" TEMP="$RUN/tmp" \
-  PYTHONDONTWRITEBYTECODE=1 python3 "$SRC/test_rounding_accuracy.py" \
+  PYTHONDONTWRITEBYTECODE=1 python3 "$SRC/tests/host/test_rounding_accuracy.py" \
   >"$RUN/stdout" 2>"$RUN/stderr")
 ```
 
@@ -51,12 +55,12 @@ mkdir -p "$RUN/tmp"
 
 ```sh
 (cd "$RUN" && TMPDIR="$RUN/tmp" TMP="$RUN/tmp" TEMP="$RUN/tmp" \
-  PYTHONDONTWRITEBYTECODE=1 python3 "$SRC/rounding_accuracy.py" analyze \
+  PYTHONDONTWRITEBYTECODE=1 python3 "$SRC/script/accuracy/rounding_accuracy.py" analyze \
   --run-dir "$RUN" --output-dir "$RUN/analysis" \
   >"$RUN/analyze.stdout" 2>"$RUN/analyze.stderr")
 ```
 
-分析与比较都要求当前执行的脚本 SHA 与该次 run 归档的 observer SHA 一致，并在执行过程中复核；如果当前源码已变动，可用 `"$RUN/snapshot/observer/rounding_accuracy.py"` 代替上面命令中的当前脚本路径（仍需满足外部工具路径和身份要求）。比较时两次 observer SHA 也必须一致。`COMPLETE.csv` 保存并在比较时核验 lanes、groups、summary、paired、coverage 的 SHA。只有完整核验才写 `analysis/COMPLETE.csv`，中途失败的 `.partial` 不能当作有效结果：核验实际进程 rc=0，NEMU stdout 中唯一真实 GOOD TRAP，stderr 串口全记录与完成计数、函数/接口/LMUL/模式/组序/n/incoming VL/输入/输出位宽/frm；输入语义与 frozen header 按实际 VLENB 重建，不能缺、重、截断、重排或假报数量；所有 `RA_` 行须以 LF 或严格 CRLF 结尾，不接受末行缺 LF 或多余 CR。明确的 ERROR、assert、abort、timeout、fail/failure/failed 等致命诊断会拒绝（仅完整 token `failed=0` 除外，不豁免 `failed=0x1` 等）。运行结束即登记 stdout/stderr 的字节数和 SHA，分析前后再次检查以识别文件被改动或截断；这不是硬件串口传输正确性的证明。所有输入、工具和 ELF/bin SHA 都在分析前后复核。
+分析与比较都要求当前执行的脚本 SHA 与该次 run 归档的 observer SHA 一致，并在执行过程中复核；如果当前源码已变动，可用 `"$RUN/snapshot/observer/rounding_accuracy.py"` 代替上面命令中的当前脚本路径（仍需满足外部工具路径和身份要求）。比较时两次 observer SHA 也必须一致。`COMPLETE.csv` 保存并在比较时核验 lanes、groups、summary、paired、coverage、execution 的 SHA；`execution.csv` 保存每函数 NEMU 指令/墙钟统计，旧分析没有该文件时按原快照脚本校验。只有完整核验才写 `analysis/COMPLETE.csv`，中途失败的 `.partial` 不能当作有效结果：核验实际进程 rc=0，NEMU stdout 中唯一真实 GOOD TRAP，stderr 串口全记录与完成计数、函数/接口/LMUL/模式/组序/n/incoming VL/输入/输出位宽/frm；输入语义与 frozen header 按实际 VLENB 重建，不能缺、重、截断、重排或假报数量；所有 `RA_` 行须以 LF 或严格 CRLF 结尾，不接受末行缺 LF 或多余 CR。明确的 ERROR、assert、abort、timeout、fail/failure/failed 等致命诊断会拒绝（仅完整 token `failed=0` 除外，不豁免 `failed=0x1` 等）。运行结束即登记 stdout/stderr 的字节数和 SHA，分析前后再次检查以识别文件被改动或截断；这不是硬件串口传输正确性的证明。所有输入、工具和 ELF/bin SHA 都在分析前后复核。
 
 - `lanes.csv.gz`：`function,interface,lmul,sample_id,frm,x_bits,z_bits,y_bits,ref_bits,rne_ref_ulp`。bits 为无 `0x` 的 8 或 16 位小写十六进制；单目 z 为空；`C` 后是 frozen corpus 零基索引，`S` 后为语义组号和 lane，语义 ref 为空。`rne_ref_ulp` 只在结果与参考均有限时为十进制；NaN/inf/语义为空。对每个 `(function,interface,lmul,sample_id)` 五行连续、模式各一次；不同函数/接口/LMUL 整块连续。此文件可对接独立 MPFR 真值分析。
 - `groups.csv.gz`：每真实调用一行，含组号、n、有效 emit 数、Nx incoming VL、调用后 frm、flags、errno。各组 `C` ID 是起始样本下标，`S` ID 是语义组号；不把组级 flags/errno 当单 lane 数据。
@@ -67,7 +71,7 @@ mkdir -p "$RUN/tmp"
 
 ```sh
 (cd "$BASE_RUN" && TMPDIR="$BASE_RUN/tmp" TMP="$BASE_RUN/tmp" TEMP="$BASE_RUN/tmp" \
-  PYTHONDONTWRITEBYTECODE=1 python3 "$SRC/rounding_accuracy.py" compare \
+  PYTHONDONTWRITEBYTECODE=1 python3 "$SRC/script/accuracy/rounding_accuracy.py" compare \
   --baseline "$BASE_RUN/analysis" --candidate "$CAND_RUN/analysis" \
   --output "$BASE_RUN/analysis/baseline-candidate.csv" \
   >"$BASE_RUN/compare.stdout" 2>"$BASE_RUN/compare.stderr")
