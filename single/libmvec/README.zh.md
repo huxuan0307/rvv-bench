@@ -21,6 +21,7 @@
 | 单次调用延迟/配对性能 | [延迟与配对框架](latency/README.zh.md) | `script/latency/` 下的构建、运行和解析入口；配对协议 2 与吞吐 CSV3 独立 |
 | 正确性、ABI、数值与主机测试 | [tests/README.md](tests/README.md) | 源码在 `tests/abi/`、`tests/unit/`、`tests/accuracy/`；入口在 `script/accuracy/`，主机测试在 `tests/host/` |
 | 旧七函数算法源码与候选构建 | [oldarchive/README.md](oldarchive/README.md) | 旧算法源码在 `oldarchive/`；构建见 `script/build_oldarchive.py` |
+| ARM 四函数实验候选 | [algo-migration/README.md](algo-migration/README.md) | 按函数分离算法与 ABI 适配层，三套测试框架显式链接，不更改默认归档 |
 | 短 trace 与波形定位 | [SEVENMATH.zh.md](SEVENMATH.zh.md) | 历史方法记录；当前脚本为 `script/build_trace.py`、`script/run_trace_*.py` |
 | 审批、版本失效、证据与报告门禁 | [workflow/README.md](workflow/README.md) | 显式 `--task`；不启动仿真 |
 | 工具全集、输入输出与历史工具状态 | [TOOLS.zh.md](TOOLS.zh.md) | 本索引的逐项说明 |
