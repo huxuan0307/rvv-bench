@@ -84,6 +84,7 @@ def main():
     parser.add_argument('--lto',action='store_true',help='enable LTO in benchmark translation units and final link')
     parser.add_argument('--direct-interface',choices=['nx','array'],default='nx',
                         help='direct kernels call Nx vector ABI (default) or array ABI')
+    parser.add_argument('--split-modes',action='store_true',help='one image per sin/exp grid mode (LTO, installed Nx ABI)')
     parser.add_argument('--max-lmul',choices=['2','8'],default='8',
                         help='cap the measurement matrix at m2, or detect available modes through m8')
     parser.add_argument('--timing-repeat',type=int,default=1,
@@ -101,6 +102,8 @@ def main():
     if len(set(a.case))!=len(a.case): parser.error('duplicate --case')
     if a.profile=='grid' and (not a.lengths or not a.batches): parser.error('grid needs --lengths and --batches')
     if a.profile!='grid' and (a.lengths or a.batches): parser.error('--lengths and --batches require --profile grid')
+    if a.split_modes and (set(a.case)-{'sin','exp'} or a.profile!='grid' or not a.lto or a.direct_interface!='nx' or a.math_archive):
+        parser.error('--split-modes requires sin/exp, grid, LTO and the installed Nx ABI')
     if not 1<=a.timing_repeat<=64: parser.error('--timing-repeat must be in [1,64]')
     for f in a.case:
         if f not in ('abi-public','float3-unit') and not (data_dir/(f+'.h')).is_file():
@@ -243,8 +246,11 @@ def main():
             'libraries':{n:identity(p) for n,p in libs.items()}}
     def save(): (out/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
     save()
+    jobs=[]
     for f in selected:
         name=f if f in ('abi-public','float3-unit') else 'perf-'+f
+        if split_mode:
+            name+='-'+split_mode
         dest=out/name; dest.mkdir(); elf=dest/(name+'.elf'); binary=elf.with_suffix('.bin')
         entry=dict(name=name,suite='accuracy' if f in ('abi-public','float3-unit') else 'performance',status='failed',
             bin=str(binary.relative_to(out)),elf=str(elf.relative_to(out)),required_markers=[f'LIBMVEC_COMPLETE case={name} status=pass'])
@@ -272,7 +278,10 @@ def main():
             else:
                 single=f.endswith('f'); binary_arg=f in BINARY_FUNCS; sew=32 if single else 64
                 defs=['-DFUNC='+f,f'-DFLOAT_INPUT={int(single)}',f'-DBINARY_INPUT={int(binary_arg)}']
-                for mode in modes:
+                # Direct Nx adapters still need scalar_strict for short tails;
+                # it is not a separate measurement mode in the split image.
+                kernel_modes=modes+['scalar_strict'] if split_mode and split_mode.startswith('direct_') else modes
+                for mode in kernel_modes:
                     obj=dest/(mode+'.o'); objs.append(obj)
                     flags=[*common,*defs,'-DKERNEL_NAME='+mode,f'-DN16_TRIM={int(a.profile=="n16-trim")}']
                     if mode.startswith('scalar'):
@@ -379,7 +388,12 @@ def main():
             if 'INTERP' in headers or '(NEEDED)' in headers or not re.search(r'Entry point address:\s+0x80000000\b',headers):
                 raise RuntimeError('invalid bare-metal ELF entry/loader')
             linked_disassembly=run([tools['objdump'],'-d',elf],name+'/disassembly')
-            if a.lto and f not in ('abi-public','float3-unit'):
+            if split_mode:
+                sym=direct_symbol(f,split_mode,'nx') if split_mode.startswith(('auto','direct')) else '(?:__)?'+f
+                calls=re.findall(r'\b(?:jal|j)\s+[^\n]*<'+sym+r'>',linked_disassembly)
+                if not calls: raise RuntimeError(f'{split_mode}: missing final math call {sym}')
+                entry['linked_mode_call_sites']=len(calls)
+            elif a.lto and f not in ('abi-public','float3-unit'):
                 # Record the real final-code result, including clones/internalization.
                 nx_symbols=[f'_ZGV{i}Nx'+('vv' if binary_arg else 'v')+'_'+f for i in (1,2)]
                 array_symbols=[f+'vec_m'+str(i) for i in (1,2)]

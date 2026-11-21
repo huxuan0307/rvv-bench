@@ -67,6 +67,8 @@ def mode_table(profile, expected_modes=None):
     if profile == 'n16-trim':
         return ('scalar_fast', 'direct_m1', 'direct_m2'), (), 'M,fast,direct1,direct2'
     modes = MODES if expected_modes is None else tuple(expected_modes)
+    if profile == 'grid' and len(modes) == 1 and modes[0] in MODES_AUTO_LMUL48:
+        return modes, CALIBRATION_MODES, 'M,' + modes[0] + ',rdcycle,empty,copy'
     if modes not in MODE_TABLES:
         raise ValueError('expected.modes: unsupported mode table')
     return modes, CALIBRATION_MODES, MODE_TABLES[modes]
@@ -77,8 +79,6 @@ def _plan(manifest_case, expected):
     if not isinstance(function, str) or function not in FUNCTIONS:
         raise ValueError('expected.function: unsupported function')
     name = manifest_case.get('name')
-    if name != f'perf-{function}':
-        raise ValueError('manifest case name does not match function')
     if manifest_case.get('suite', 'performance') != 'performance':
         raise ValueError('compact CSV supports only performance cases')
     profile = expected.get('profile', 'full')
@@ -87,6 +87,11 @@ def _plan(manifest_case, expected):
     if profile == 'format-smoke' and function != 'log':
         raise ValueError('format-smoke supports only log')
     modes, controls, mode_header = mode_table(profile, expected.get('modes'))
+    split = len(modes) == 1
+    if split and (function not in ('sin', 'exp') or expected.get('wire_format') != 'csv3'):
+        raise ValueError('single-mode grids require sin/exp and csv3')
+    if name != f'perf-{function}' + ('-' + modes[0] if split else ''):
+        raise ValueError('manifest case name does not match function/mode')
     for key, wanted in (('modes', modes), ('calibration_modes', controls)):
         if not isinstance(expected.get(key), list) or expected[key] != list(wanted):
             raise ValueError(f'expected.{key}: mode table mismatch')

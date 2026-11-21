@@ -97,6 +97,32 @@ def csv3_text_auto(function, repeat=4):
     return '\n'.join(lines)
 
 
+def case_single(function, mode, lengths, batches, repeat=1):
+    """Split-grid manifest: one measurement mode plus the three controls."""
+    base = case(function, lengths, batches, repeat)
+    base['name'] = 'perf-' + function + '-' + mode
+    base['expected']['modes'] = [mode]
+    base['expected']['sample_count'] = 10 * len(lengths) * len(batches)
+    base['expected']['order_policy'] = 'rotate-all-4'
+    return base
+
+
+def csv3_text_single(function, mode, repeat=4):
+    """Minimal complete csv3 block for a one-mode split image."""
+    lines = [f'LIBMVEC_CSV,3,{function},128,123456789,grid,{repeat}',
+             'M,' + mode + ',rdcycle,empty,copy',
+             'm,hash,' + ','.join(f'b{r},c{r}' for r in range(10)),
+             'B,128,1']
+    for column in range(4):
+        values = []
+        for r in range(10):
+            values += [100000 + column * 1000 + r * 40, (300 + column * 7) * repeat + r]
+        lines.append('D,' + str(column) + ',123456789,' +
+                     ','.join(str(value) for value in values))
+    lines += ['T,1000,0,40', 'E,perf-' + function + '-' + mode + ',pass', '']
+    return '\n'.join(lines)
+
+
 class InfraTests(unittest.TestCase):
     def test_direct_gsim_timeout_can_be_explicitly_disabled(self):
         parser = run.build_parser()
@@ -267,6 +293,23 @@ class InfraTests(unittest.TestCase):
         broken['expected']['modes'] = list(common.MODES_LMUL48) + ['auto_m8', 'auto_m4']
         with self.assertRaises(common.ManifestError):
             common.expected_plan(broken, 'performance', 'perf-log')
+
+    def test_single_mode_split_case_keeps_strict_naming(self):
+        """A split image measures one mode; its case name and matrix must agree."""
+        manifest = case_single('sin', 'auto_m8', [128], [1], repeat=32)
+        expanded, metadata = compact_csv.expand(csv3_text_single('sin', 'auto_m8', repeat=32), manifest)
+        self.assertEqual(metadata['logical_records'], 40)
+        self.assertIn('auto_m8', expanded)
+        plan = common.expected_plan(manifest, 'performance', 'perf-sin-auto_m8')
+        self.assertEqual(plan['modes'], ['auto_m8'])
+        self.assertEqual(len(list(common.rotation_schedule(plan))), 40)
+        # The single-mode table is only valid for a split sin/exp grid image.
+        for broken in ({'name': 'perf-sin'}, {'name': 'perf-sin-auto_m8',
+                                              'expected': {**manifest['expected'], 'profile': 'full'}}):
+            bad = {'suite': 'performance', **broken}
+            bad.setdefault('expected', manifest['expected'])
+            with self.subTest(bad=broken), self.assertRaises(common.ManifestError):
+                common.expected_plan(bad, 'performance', bad['name'])
 
     def test_direct_mapping_auto_is_always_nx(self):
         for function in build.FUNCS:

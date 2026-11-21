@@ -445,14 +445,14 @@ def expected_plan(entry, suite, name):
         if function not in PERF_FUNCTIONS:
             raise ManifestError(
                 f'{name}: expected.function must be one of {PERF_FUNCTIONS}')
-        if name != 'perf-' + function:
-            raise ManifestError(
-                f'{name}: performance case name must be perf-{function}')
         profile = expected.get('profile', 'full')
         if profile not in ('full', 'format-smoke', 'n16', 'n16-trim', 'grid'):
             raise ManifestError(f'{name}: unknown profile {profile!r}')
         modes = expected.get('modes')
-        if profile == 'n16-trim':
+        if (profile == 'grid' and function in ('sin', 'exp') and expected.get('wire_format') == 'csv3'
+                and isinstance(modes, list) and len(modes) == 1 and modes[0] in MODES_AUTO_LMUL48):
+            wanted_modes = tuple(modes)
+        elif profile == 'n16-trim':
             wanted_modes = N16_TRIM_MODES
         elif isinstance(modes, list) and tuple(modes) in (MODES, MODES_LMUL48,
                                                           MODES_AUTO_LMUL48):
@@ -462,6 +462,9 @@ def expected_plan(entry, suite, name):
                 f'{name}: expected.modes must be one of '
                 f'{list(MODES)!r}, {list(MODES_LMUL48)!r} or '
                 f'{list(MODES_AUTO_LMUL48)!r}')
+        wanted_name = 'perf-' + function + ('-' + wanted_modes[0] if len(wanted_modes) == 1 else '')
+        if name != wanted_name:
+            raise ManifestError(f'{name}: performance case name must be {wanted_name}')
         wanted_controls = () if profile == 'n16-trim' else CALIBRATION_MODES
         wanted_policy = 'rotate-all-' + str(len(wanted_modes) + len(wanted_controls))
         if not isinstance(modes, list) or modes != list(wanted_modes):

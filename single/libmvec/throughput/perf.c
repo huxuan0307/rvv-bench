@@ -4,7 +4,11 @@
 #include DATA_HEADER
 #define STR1(x) #x
 #define STR(x) STR1(x)
+#ifdef SINGLE_MODE
+#define CASE_NAME "perf-" STR(FUNC) "-" STR(SINGLE_MODE)
+#else
 #define CASE_NAME "perf-" STR(FUNC)
+#endif
 #define GUARD ((bits_t)0x5aa55aa55aa55aa5ULL)
 #define ROUNDS 10
 #ifndef N16_TRIM
@@ -30,7 +34,7 @@
 #ifndef HARNESS_MODES
 #define HARNESS_MODES 6
 #endif
-#if HARNESS_MODES != 6 && HARNESS_MODES != 8 && HARNESS_MODES != 10
+#if !defined(SINGLE_MODE) && HARNESS_MODES != 6 && HARNESS_MODES != 8 && HARNESS_MODES != 10
 #error "HARNESS_MODES must be 6, 8 or 10"
 #endif
 #define MODES HARNESS_MODES
@@ -70,7 +74,10 @@ static real_t z[WORK_COUNT] __attribute__((aligned(64)));
 static struct { real_t before[GUARD_ELEMENTS]; real_t y[WORK_COUNT]; real_t after[GUARD_ELEMENTS]; } output __attribute__((aligned(64)));
 static volatile uint64_t result_sink;
 static uint64_t total_checks, failed;
-#if N16_TRIM
+#ifdef SINGLE_MODE
+static const kernel_fn funcs[MODES]={SINGLE_MODE};
+static const char *names[MODES+CONTROLS]={STR(SINGLE_MODE),"rdcycle","empty","copy"};
+#elif N16_TRIM
 static const kernel_fn funcs[MODES]={scalar_fast,direct_m1,direct_m2};
 static const char *names[MODES]={"scalar_fast","direct_m1","direct_m2"};
 #elif HARNESS_MODES == 8
@@ -87,7 +94,9 @@ static const char *names[MODES+CONTROLS]={"scalar_strict","scalar_fast","auto_m1
 #endif
 /* Per-mode LMUL of the Nx/array entry; only used to probe VLMAX-adjacent
    lengths.  auto_* keep their compile-time -mrvv-max-lmul value. */
-#if N16_TRIM
+#ifdef SINGLE_MODE
+static const unsigned mode_lmul[MODES]={SINGLE_LMUL};
+#elif N16_TRIM
 static const unsigned mode_lmul[MODES]={1,1,2};
 #elif HARNESS_MODES == 8
 static const unsigned mode_lmul[MODES]={1,1,1,2,1,2,4,8};
@@ -180,7 +189,9 @@ __attribute__((noinline,noclone)) static int print_csv(uint64_t vlenb) {
         }
     if(failed) return 1;
     printf("LIBMVEC_CSV,3,%s,%llu,123456789,%s,%u\n",STR(FUNC),(unsigned long long)(vlenb*8),PROFILE_NAME,(unsigned)TIMING_REPEAT);
-#if N16_TRIM
+#ifdef SINGLE_MODE
+    printf("M," STR(SINGLE_MODE) ",rdcycle,empty,copy\n");
+#elif N16_TRIM
     printf("M,fast,direct1,direct2\n");
 #elif HARNESS_MODES == 8
     printf("M,strict,fast,auto1,auto2,direct1,direct2,direct4,direct8,rdcycle,empty,copy\n");
