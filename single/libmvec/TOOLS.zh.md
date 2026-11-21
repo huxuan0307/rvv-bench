@@ -8,7 +8,7 @@
 | 目的 | 入口 | 输入/输出与限制 |
 |---|---|---|
 | 构建安装版 libmvec 吞吐镜像 | [script/build.py](script/build.py) | `--prefix`、`--data-dir`、`--case`、`--profile`、`--output`；冻结测试源码、oracle、ELF/BIN 与 manifest；不运行测试 |
-| 构建旧七函数算法库/候选 | [script/build_oldarchive.py](script/build_oldarchive.py) | `--prefix`、`--source <oldarchive目录>`、`--output`、`--functions`、`--variant`；旧算法实验，不说明当前公开 libmvec 精度 |
+| 构建 glibc 来源候选库 | [script/build_oldarchive.py](script/build_oldarchive.py) | `--prefix`、`--source <algo-migration目录>`、`--output`、`--functions`、`--variant`；候选实验，不说明当前公开 libmvec 精度 |
 | 构建 ARM 四函数实验候选 | [script/migration/build_archive.py](script/migration/build_archive.py) | `--variant arm`、`--gcc`、`--output`；只产生显式替换归档，见[来源与限制](algo-migration/README.md) |
 | NEMU 功能预检 / gsim 周期测量 | [script/run.py](script/run.py) | `nemu`/`gsim` 子命令、`--manifest`、`--output`；gsim 会启动仿真，须显式 `--emu`、`--reference`、`--dramsim3-ini` |
 | 严格采集与审计 | [script/collect.py](script/collect.py) | `--run`、`--require-complete`；写 `reports/samples.csv`、`groups.csv`、`results.csv` 等；不启动仿真 |

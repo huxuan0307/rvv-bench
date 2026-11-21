@@ -64,7 +64,7 @@ def build(args):
             raise ValueError(f'工具不存在或不可执行：{path}')
     tool_ids = {name: identity(path) for name, path in tools.items()}
     source = {'README.md': CANDIDATES / 'README.md',
-              'COPYING.LIB': LIB / 'oldarchive' / 'COPYING.LIB'}
+              'COPYING.LIB': CANDIDATES / 'COPYING.LIB'}
     sources = []
     for fn in args.functions:
         kernel = f'kernels/{fn}/{args.variant}.c'

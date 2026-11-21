@@ -29,9 +29,9 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(len(functions), 7)
         units = build.select_units(functions)
         self.assertEqual(units.count('trigvec_data'), 1)
-        self.assertEqual(len(units), 12)
-        self.assertEqual(build.select_units(['sin']), ['sinvec', 'trigvec_data'])
-        self.assertEqual(build.select_units(['cos']), ['cosvec', 'trigvec_data'])
+        self.assertEqual(len(units), 18)
+        self.assertEqual(build.select_units(['sin']), ['sin_m1', 'sin_m2', 'trigvec_data'])
+        self.assertEqual(build.select_units(['cos']), ['cos_m1', 'cos_m2', 'trigvec_data'])
         for invalid in ('', 'log,log', 'log,unknown', 'log,', ' log', 'sin,cos,sin'):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 build.select_functions(invalid)
@@ -110,7 +110,7 @@ class BuildTests(unittest.TestCase):
             'lifetime-hybrid': ['-DLOGVEC_HOT_LIFETIME=1', '-DLOGVEC_ARRAY_M1_BASELINE=1'],
         }
         self.assertEqual(build.VARIANT_FLAGS, expected_flags)
-        for unit in ('logvec', 'logvec_data'):
+        for unit in ('log_m1', 'log_m2', 'logvec_data'):
             for variant, flags in expected_flags.items():
                 for lto, mode in ((False, '-fno-lto'), (True, '-flto')):
                     with self.subTest(unit=unit, variant=variant, lto=lto):
@@ -119,9 +119,9 @@ class BuildTests(unittest.TestCase):
                         macros = ''.join(f'#define {f[2:-2]} 1\n' for f in flags)
                         build.check_macros(macros, unit, variant)
         other_units = set(build.select_units(list(build.FUNCTION_UNITS))) - set(build.FUNCTION_UNITS['log'])
-        kernels = {'expvec': 'exp', 'expfvec': 'expf', 'logfvec': 'logf',
-                   'powvec': 'pow', 'sinvec': 'sin', 'cosvec': 'cos',
-                   'sinfvec': 'sinf', 'cosfvec': 'cosf', 'powfvec': 'powf'}
+        kernels = {f'{f}_m{l}': f for f in ('exp', 'expf', 'logf', 'pow', 'sin',
+                                            'cos', 'sinf', 'cosf', 'powf')
+                   for l in (1, 2)}
         for unit in other_units:
             if unit.endswith('vec_data'):
                 expected = {'baseline': [], 'cold': [], 'lifetime': []}
@@ -143,7 +143,7 @@ class BuildTests(unittest.TestCase):
                             with self.assertRaises(ValueError):
                                 build.check_macros(f'#define {name} {value}\n', unit, variant)
         # Uniform is an independent sin-only factor, never a data-unit macro.
-        uniform = build.unit_flags('sinvec', 'lifetime+uniform', False)
+        uniform = build.unit_flags('sin_m1', 'lifetime+uniform', False)
         self.assertEqual(uniform, build.BASE + ['-fno-lto', build.SIXMATH_COLD,
                                                 build.SIXMATH_HOT,
                                                 build.SIXMATH_TRIG_UNIFORM,
@@ -151,19 +151,19 @@ class BuildTests(unittest.TestCase):
         build.check_macros('#define SIXMATH_COLD_DISPATCH 1\n'
                            '#define SIXMATH_HOT_LIFETIME 1\n'
                            '#define SIXMATH_TRIG_UNIFORM 1\n',
-                           'sinvec', 'lifetime+uniform')
-        self.assertEqual(build.unit_flags('sinvec', 'baseline+uniform', False),
+                           'sin_m1', 'lifetime+uniform')
+        self.assertEqual(build.unit_flags('sin_m1', 'baseline+uniform', False),
                          build.BASE + ['-fno-lto', build.SIXMATH_TRIG_UNIFORM,
                                        '-ffp-contract=fast'])
-        for unit, variant in (('cosvec', 'lifetime+uniform'),
-                              ('sinvec', 'baseline+uniform+uniform')):
+        for unit, variant in (('cos_m1', 'lifetime+uniform'),
+                              ('sin_m1', 'baseline+uniform+uniform')):
             with self.subTest(unit=unit, variant=variant), self.assertRaises(ValueError):
                 build.unit_experiment_flags(unit, variant)
         with self.assertRaises(ValueError):
             build.check_macros('#define SIXMATH_COLD_DISPATCH 1\n'
                                '#define SIXMATH_HOT_LIFETIME 1\n'
                                '#define SIXMATH_TRIG_UNIFORM 1\n',
-                               'sinvec', 'lifetime')
+                               'sin_m1', 'lifetime')
         hybrid = '#define LOGVEC_HOT_LIFETIME 1\n#define LOGVEC_ARRAY_M1_BASELINE 1\n'
         bad_hybrid = ('', '#define LOGVEC_HOT_LIFETIME 1\n', '#define LOGVEC_ARRAY_M1_BASELINE 1\n',
                       '#define LOGVEC_HOT_LIFETIME 0\n#define LOGVEC_ARRAY_M1_BASELINE 1\n',
@@ -172,7 +172,7 @@ class BuildTests(unittest.TestCase):
                       hybrid + '#define LOGVEC_M1_ARRAY_FULL 1\n',
                       hybrid + '#define LOGVEC_M1_ARRAY_CORE 0\n',
                       hybrid + '#define SIXMATH_TRIG_UNIFORM 0\n')
-        for unit in ('logvec', 'logvec_data'):
+        for unit in ('log_m1', 'log_m2', 'logvec_data'):
             for bad in bad_hybrid:
                 with self.subTest(unit=unit, bad=bad), self.assertRaises(ValueError):
                     build.check_macros(bad, unit, 'lifetime-hybrid')
@@ -233,16 +233,20 @@ class BuildTests(unittest.TestCase):
             build.verify_symbols(text + '\n00000000 T _ZGV2Nxvv_pow', functions)
 
     def test_source_tree_contains_complete_graph(self):
-        source = Path(__file__).resolve().parents[2] / 'oldarchive'
+        source = Path(__file__).resolve().parents[2] / 'algo-migration'
         files = build.local_closure(source, build.select_units(list(build.FUNCTION_UNITS)))
-        for name in ('common/newlib.h', 'common/unary_entries.inc.h', 'pow/binary_entries.inc.h',
-                     'pow/powvec_data.h', 'common/scalar_tables.h', 'common/trigvec_data.h',
-                     'common/trigvec_impl.h', 'log/logvec_impl.inc.h'):
+        for name in ('kernels/common/newlib.h', 'kernels/common/unary_entries.inc.h',
+                     'kernels/pow/binary_entries.inc.h', 'kernels/pow/powvec_data.h',
+                     'kernels/common/scalar_tables.h', 'kernels/common/trigvec_data.h',
+                     'kernels/common/trigvec_impl.h', 'kernels/log/glibc.c',
+                     'entries/log/glibc_m1.c', 'entries/log/glibc_m2.c'):
             self.assertIn(name, files)
-        self.assertEqual(files.count('common/trigvec_data.c'), 1)
+        self.assertEqual(files.count('kernels/common/trigvec_data.c'), 1)
         log_files = build.local_closure(source, build.select_units(['log']))
-        for name in ('log/logvec.c', 'log/logvec_data.c', 'log/logvec.h', 'log/logvec_data.h',
-                     'log/logvec_impl.inc.h', 'common/newlib.h', 'common/unary_entries.inc.h'):
+        for name in ('entries/log/glibc_m1.c', 'entries/log/glibc_m2.c',
+                     'kernels/log/glibc.c', 'kernels/log/logvec_data.c',
+                     'kernels/log/logvec.h', 'kernels/log/logvec_data.h',
+                     'kernels/common/newlib.h', 'kernels/common/unary_entries.inc.h'):
             self.assertIn(name, log_files)
 
 

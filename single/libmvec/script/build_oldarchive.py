@@ -2,7 +2,7 @@
 """构建七函数 baseline 或单函数候选；显式提供工具链、源码与全新输出。
 
 示例（在独立日期运行目录内，TMPDIR 指向该目录下独立子目录）：
-  python3 -B /绝对路径/script/build_oldarchive.py --prefix /工具链 --source /源码/oldarchive \
+  python3 -B /绝对路径/script/build_oldarchive.py --prefix /工具链 --source /源码/algo-migration \
       --output /实验/build/日期时间-seven-baseline --log-dir ./commands \
       --functions log,exp,expf,logf,pow,sin,cos --variant baseline
 
@@ -45,28 +45,33 @@ SIXMATH_HOT = '-DSIXMATH_HOT_LIFETIME=1'
 SIXMATH_EXPF_HOT = '-DSIXMATH_EXPF_HOT_LIFETIME=1'
 SIXMATH_TRIG_UNIFORM = '-DSIXMATH_TRIG_UNIFORM=1'
 FUNCTION_UNITS = {
-    'log': ('logvec', 'logvec_data'),
-    'exp': ('expvec', 'expvec_data'),
-    'expf': ('expfvec', 'expfvec_data'),
-    'logf': ('logfvec', 'logfvec_data'),
-    'pow': ('powvec',),
-    'sin': ('sinvec', 'trigvec_data'),
-    'cos': ('cosvec', 'trigvec_data'),
-    'sinf': ('sinfvec', 'sincosfvec_data'),
-    'cosf': ('cosfvec', 'sincosfvec_data'),
-    'powf': ('powfvec', 'powfvec_data', 'expfvec_data'),
+    'log': ('log_m1', 'log_m2', 'logvec_data'),
+    'exp': ('exp_m1', 'exp_m2', 'expvec_data'),
+    'expf': ('expf_m1', 'expf_m2'),
+    'logf': ('logf_m1', 'logf_m2', 'logfvec_data'),
+    'pow': ('pow_m1', 'pow_m2'),
+    'sin': ('sin_m1', 'sin_m2', 'trigvec_data'),
+    'cos': ('cos_m1', 'cos_m2', 'trigvec_data'),
+    'sinf': ('sinf_m1', 'sinf_m2', 'sincosfvec_data'),
+    'cosf': ('cosf_m1', 'cosf_m2', 'sincosfvec_data'),
+    'powf': ('powf_m1', 'powf_m2', 'powfvec_data', 'expfvec_data'),
 }
-# 保留原编译单元名称，使 archive 成员与变体选择稳定。
+# 保留原编译单元命名习惯，使变体选择与成员名稳定。
 UNIT_PATHS = {
-    unit: f'{function}/{unit}.c'
-    for function, units in FUNCTION_UNITS.items() for unit in units
+    f'{function}_m{lmul}': f'entries/{function}/glibc_m{lmul}.c'
+    for function in FUNCTION_UNITS for lmul in (1, 2)
 }
 UNIT_PATHS.update({
-    'trigvec_data': 'common/trigvec_data.c',
-    'sincosfvec_data': 'common/sincosfvec_data.c',
-    'expfvec_data': 'common/expfvec_data.c',
+    'expvec_data': 'kernels/exp/expvec_data.c',
+    'logvec_data': 'kernels/log/logvec_data.c',
+    'logfvec_data': 'kernels/logf/logfvec_data.c',
+    'powfvec_data': 'kernels/powf/powfvec_data.c',
+    'trigvec_data': 'kernels/common/trigvec_data.c',
+    'sincosfvec_data': 'kernels/common/sincosfvec_data.c',
+    'expfvec_data': 'kernels/common/expfvec_data.c',
 })
-SOURCE_DIRS = ('common', *FUNCTION_UNITS)
+# 入口以相对路径包含核与共享头，不需要额外 -I 目录。
+SOURCE_DIRS = ()
 
 
 def include_dirs(source):
@@ -215,7 +220,8 @@ def unit_experiment_flags(unit, variant):
         if uniform:
             raise ValueError('+uniform 仅支持 sin')
         return list(VARIANT_FLAGS[base])
-    kernels = {units[0]: f for f, units in FUNCTION_UNITS.items() if f != 'log'}
+    kernels = {entry: f for f, units in FUNCTION_UNITS.items() if f != 'log'
+               for entry in units if entry.endswith(('_m1', '_m2'))}
     if unit not in kernels:
         if unit not in select_units(list(FUNCTION_UNITS)):
             raise ValueError('未知编译单元: ' + unit)

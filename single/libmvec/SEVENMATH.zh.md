@@ -7,7 +7,7 @@
 > [README.zh.md](README.zh.md) 与 [TOOLS.zh.md](TOOLS.zh.md)，精度工具的当前路径在 `script/accuracy/`。
 >
 > 路径迁移：旧 `$SRC/math/build.py` 与 `math/` 无当前等价（旧算法构建见
-> `script/build_oldarchive.py --source oldarchive`，CLI/语义不同）；旧 `$SRC/build.py` 对应
+> `script/build_oldarchive.py --source algo-migration`，CLI/语义不同）；旧 `$SRC/build.py` 对应
 > `script/build.py`；旧 `$SRC/run.py`、
 > `collect.py`、`build_trace.py`、`run_trace_*.py` 对应 `script/` 下同名脚本；旧 `$SRC/test_*.py`
 > 对应 `tests/host/`。以各脚本 `--help` 为准。
