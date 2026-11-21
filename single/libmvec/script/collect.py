@@ -721,13 +721,13 @@ def audit_run(run, metadata, manifest):
     if backend == 'run-emu':
         issues.extend(audit_external_runner(run, metadata))
     try:
-        expected_timeout = common.parse_duration(policy.get('timeout'))
+        expected_timeout = common.parse_duration(
+            policy.get('timeout'), allow_none=metadata['mode'] == 'gsim' and backend == 'direct')
     except ValueError:
-        expected_timeout = None
         issues.append('policy.timeout is invalid')
-    if (expected_timeout is not None and
-            policy.get('timeout_seconds') != expected_timeout):
-        issues.append('policy.timeout_seconds does not match policy.timeout')
+    else:
+        if 'timeout_seconds' not in policy or policy['timeout_seconds'] != expected_timeout:
+            issues.append('policy.timeout_seconds does not match policy.timeout')
     if metadata['mode'] == 'gsim':
         if policy.get('seed') != 123456789:
             issues.append(f'policy.seed is {policy.get("seed")}, expected 123456789')

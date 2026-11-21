@@ -98,6 +98,24 @@ def csv3_text_auto(function, repeat=4):
 
 
 class InfraTests(unittest.TestCase):
+    def test_direct_gsim_timeout_can_be_explicitly_disabled(self):
+        parser = run.build_parser()
+        base = ['--manifest', 'm', '--output', 'o']
+        gsim = ['gsim', *base, '--emu', 'e', '--reference', 'r', '--dramsim3-ini', 'd']
+        default = run.validate_arguments(parser, parser.parse_args(gsim))
+        self.assertEqual(default.timeout_seconds, 24 * 3600)
+        direct = run.validate_arguments(parser, parser.parse_args(
+            [*gsim, '--timeout', 'none', '--jobs', '2', '--no-smoke']))
+        self.assertIsNone(direct.timeout_seconds)
+        self.assertTrue(direct.no_smoke)
+        self.assertEqual(direct.jobs, 2)
+        for args in (['nemu', *base, '--nemu', 'n', '--timeout', 'none'],
+                     [*gsim, '--backend', 'run-emu', '--runner', 'r', '--timeout', 'none']):
+            with mock.patch.object(parser, 'error', side_effect=ValueError) as error:
+                with self.assertRaises(ValueError):
+                    run.validate_arguments(parser, parser.parse_args(args))
+                self.assertIn('invalid duration', error.call_args.args[0])
+
     def test_grid_validation_and_seven_function_names(self):
         self.assertEqual(build.grid_values('16,128', max_value=1024), [16, 128])
         for invalid in ('', '0', '16,16', '1,2,3,4', '1025', 'x'):

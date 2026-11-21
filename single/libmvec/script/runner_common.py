@@ -261,7 +261,9 @@ DURATION = re.compile(r'([0-9]+(?:\.[0-9]+)?)([smhd]?)\Z', re.I)
 DURATION_FACTORS = {'': 1.0, 's': 1.0, 'm': 60.0, 'h': 3600.0, 'd': 86400.0}
 
 
-def parse_duration(text):
+def parse_duration(text, *, allow_none=False):
+    if allow_none and text == 'none':
+        return None
     if not isinstance(text, str):
         raise ValueError(f'invalid duration: {text!r}')
     match = DURATION.fullmatch(text.strip())
@@ -718,16 +720,16 @@ def launch_process(command, cwd, stdout_path, stderr_path, timeout, registry):
             if process is not None:
                 registry.add(process.pid)
                 try:
-                    deadline = started + timeout
+                    deadline = None if timeout is None else started + timeout
                     while True:
-                        remaining = deadline - time.monotonic()
-                        if remaining <= 0:
+                        remaining = None if deadline is None else deadline - time.monotonic()
+                        if remaining is not None and remaining <= 0:
                             timed_out = True
                             _killpg(process.pid, signal.SIGKILL)
                             returncode = process.wait()
                             break
                         try:
-                            returncode = process.wait(timeout=min(remaining, 0.5))
+                            returncode = process.wait(timeout=0.5 if remaining is None else min(remaining, 0.5))
                             break
                         except subprocess.TimeoutExpired:
                             if registry.abort.is_set():

@@ -2,8 +2,8 @@
  *
  * The including translation unit (paired_<function>.c) must define:
  *
- *   PAIRED_FN         function token: atan / atan2 / acos / log10
- *   PAIRED_FN_STR     "atan" / "atan2" / "acos" / "log10"
+ *   PAIRED_FN         function token: atan / atan2 / acos / log10 / sin / exp
+ *   PAIRED_FN_STR     C string with the function name
  *   PAIRED_BINARY     0 for unary entries, 1 for atan2
  *   PAIRED_DATA_HEADER  the frozen corpus header of that function
  *   PAIRED_GROUP      symbol name of the exported pair_probe_group
@@ -12,7 +12,7 @@
  *   PAIRED_PAIR_FNV / PAIRED_SEED_COUNT
  *                     exported seed-identity interface used by paired_main.c
  *
- * Everything else (probe bodies, case table) is generated here, so the four
+ * Everything else (probe bodies, case table) is generated here, so the
  * functions cannot drift apart in protocol details.
  */
 #include <stdint.h>
@@ -850,20 +850,32 @@ pair_oracle_check (const double *out, unsigned lanes, const uint64_t *ref,
 #define PAIR_CASE_MM1 "|m1|"
 #define PAIR_CASE_MM2 "|m2|"
 
+/* Bit order is PAIRED_CASE_DIMS in build_latency.py. Disabled cases must
+ * have neither probe bodies (callee relocations) nor table entries. */
+#ifndef PAIRED_PROBE_MASK
+#define PAIRED_PROBE_MASK 0xff
+#endif
+#define PAIR_ENABLED(i) ((PAIRED_PROBE_MASK) & (1 << (i)))
+
 #if PAIRED_BINARY
 
+#if PAIR_ENABLED (0)
 PAIR_LAT_BINARY (m1_fixed_unmasked, atan2, 2, vfloat64m1_t,
                  __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
                  PAIR_CALL_U_FIX_M1, lat_pair_zero_m1, lat_pair_add_m1)
 PAIR_TPUT_BINARY (m1_fixed_unmasked_tput, atan2, 2, vfloat64m1_t,
                   __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
                   PAIR_CALL_U_FIX_M1)
+#endif
+#if PAIR_ENABLED (1)
 PAIR_LAT_BINARY (m1_scalable_unmasked, atan2, PAIRED_SCAL_M1_LANES,
                  vfloat64m1_t, __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
                  PAIR_CALL_U_SC_M1, lat_pair_zero_m1, lat_pair_add_m1)
 PAIR_TPUT_BINARY (m1_scalable_unmasked_tput, atan2, PAIRED_SCAL_M1_LANES,
                   vfloat64m1_t, __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
                   PAIR_CALL_U_SC_M1)
+#endif
+#if PAIR_ENABLED (2)
 PAIR_LAT_BINARY_MASKED (m1_fixed_masked, atan2, 2, vfloat64m1_t, vbool64_t,
                         __riscv_vmset_m_b64, __riscv_vsm_v_b64,
                         __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
@@ -873,6 +885,8 @@ PAIR_TPUT_BINARY_MASKED (m1_fixed_masked_tput, atan2, 2, vfloat64m1_t,
                          vbool64_t, __riscv_vmset_m_b64, __riscv_vsm_v_b64,
                          __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
                          PAIR_CALL_UM_FIX_M1)
+#endif
+#if PAIR_ENABLED (3)
 PAIR_LAT_BINARY_MASKED (m1_scalable_masked, atan2, PAIRED_SCAL_M1_LANES,
                         vfloat64m1_t, vbool64_t, __riscv_vmset_m_b64,
                         __riscv_vsm_v_b64, __riscv_vle64_v_f64m1,
@@ -882,18 +896,24 @@ PAIR_TPUT_BINARY_MASKED (m1_scalable_masked_tput, atan2, PAIRED_SCAL_M1_LANES,
                          vfloat64m1_t, vbool64_t, __riscv_vmset_m_b64,
                          __riscv_vsm_v_b64, __riscv_vle64_v_f64m1,
                          __riscv_vse64_v_f64m1, PAIR_CALL_UM_SC_M1)
+#endif
+#if PAIR_ENABLED (4)
 PAIR_LAT_BINARY (m2_fixed_unmasked, atan2, 4, vfloat64m2_t,
                  __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
                  PAIR_CALL_U_FIX_M2, lat_pair_zero_m2, lat_pair_add_m2)
 PAIR_TPUT_BINARY (m2_fixed_unmasked_tput, atan2, 4, vfloat64m2_t,
                   __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
                   PAIR_CALL_U_FIX_M2)
+#endif
+#if PAIR_ENABLED (5)
 PAIR_LAT_BINARY (m2_scalable_unmasked, atan2, PAIRED_SCAL_M2_LANES,
                  vfloat64m2_t, __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
                  PAIR_CALL_U_SC_M2, lat_pair_zero_m2, lat_pair_add_m2)
 PAIR_TPUT_BINARY (m2_scalable_unmasked_tput, atan2, PAIRED_SCAL_M2_LANES,
                   vfloat64m2_t, __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
                   PAIR_CALL_U_SC_M2)
+#endif
+#if PAIR_ENABLED (6)
 PAIR_LAT_BINARY_MASKED (m2_fixed_masked, atan2, 4, vfloat64m2_t, vbool32_t,
                         __riscv_vmset_m_b32, __riscv_vsm_v_b32,
                         __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
@@ -903,6 +923,8 @@ PAIR_TPUT_BINARY_MASKED (m2_fixed_masked_tput, atan2, 4, vfloat64m2_t,
                          vbool32_t, __riscv_vmset_m_b32, __riscv_vsm_v_b32,
                          __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
                          PAIR_CALL_UM_FIX_M2)
+#endif
+#if PAIR_ENABLED (7)
 PAIR_LAT_BINARY_MASKED (m2_scalable_masked, atan2, PAIRED_SCAL_M2_LANES,
                         vfloat64m2_t, vbool32_t, __riscv_vmset_m_b32,
                         __riscv_vsm_v_b32, __riscv_vle64_v_f64m2,
@@ -912,6 +934,7 @@ PAIR_TPUT_BINARY_MASKED (m2_scalable_masked_tput, atan2, PAIRED_SCAL_M2_LANES,
                          vfloat64m2_t, vbool32_t, __riscv_vmset_m_b32,
                          __riscv_vsm_v_b32, __riscv_vle64_v_f64m2,
                          __riscv_vse64_v_f64m2, PAIR_CALL_UM_SC_M2)
+#endif
 
 #else /* unary */
 
@@ -922,14 +945,19 @@ PAIR_TPUT_BINARY_MASKED (m2_scalable_masked_tput, atan2, PAIRED_SCAL_M2_LANES,
   PAIR_TPUT_UNARY (TAG, atan, LANES, vfloat64m1_t, __riscv_vle64_v_f64m1,     \
                    __riscv_vse64_v_f64m1, SYM)
 
+#if PAIR_ENABLED (0)
 PAIR_LAT_U (m1_fixed_unmasked, fixed, unmasked, 2, PAIR_CALL_U_FIX_M1,
             lat_pair_zero_m1, lat_pair_add_m1, PAIR_SCRUB_ID)
 PAIR_TPUT_U (m1_fixed_unmasked_tput, 2, PAIR_CALL_U_FIX_M1)
+#endif
+#if PAIR_ENABLED (1)
 PAIR_LAT_U (m1_scalable_unmasked, scalable, unmasked, PAIRED_SCAL_M1_LANES,
             PAIR_CALL_U_SC_M1, lat_pair_zero_m1, lat_pair_add_m1,
             PAIR_SCRUB_ID)
 PAIR_TPUT_U (m1_scalable_unmasked_tput, PAIRED_SCAL_M1_LANES,
              PAIR_CALL_U_SC_M1)
+#endif
+#if PAIR_ENABLED (2)
 PAIR_LAT_UNARY_MASKED (m1_fixed_masked, atan, 2, vfloat64m1_t, vbool64_t,
                        __riscv_vmset_m_b64, __riscv_vsm_v_b64,
                        __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
@@ -939,6 +967,8 @@ PAIR_TPUT_UNARY_MASKED (m1_fixed_masked_tput, atan, 2, vfloat64m1_t, vbool64_t,
                         __riscv_vmset_m_b64, __riscv_vsm_v_b64,
                         __riscv_vle64_v_f64m1, __riscv_vse64_v_f64m1,
                         PAIR_CALL_UM_FIX_M1)
+#endif
+#if PAIR_ENABLED (3)
 PAIR_LAT_UNARY_MASKED (m1_scalable_masked, atan, PAIRED_SCAL_M1_LANES,
                        vfloat64m1_t, vbool64_t, __riscv_vmset_m_b64,
                        __riscv_vsm_v_b64, __riscv_vle64_v_f64m1,
@@ -948,6 +978,8 @@ PAIR_TPUT_UNARY_MASKED (m1_scalable_masked_tput, atan, PAIRED_SCAL_M1_LANES,
                         vfloat64m1_t, vbool64_t, __riscv_vmset_m_b64,
                         __riscv_vsm_v_b64, __riscv_vle64_v_f64m1,
                         __riscv_vse64_v_f64m1, PAIR_CALL_UM_SC_M1)
+#endif
+#if PAIR_ENABLED (4)
 PAIR_LAT_UNARY (m2_fixed_unmasked, atan, 4, vfloat64m2_t,
                 __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
                 PAIR_CALL_U_FIX_M2, lat_pair_zero_m2, lat_pair_add_m2,
@@ -955,6 +987,8 @@ PAIR_LAT_UNARY (m2_fixed_unmasked, atan, 4, vfloat64m2_t,
 PAIR_TPUT_UNARY (m2_fixed_unmasked_tput, atan, 4, vfloat64m2_t,
                  __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
                  PAIR_CALL_U_FIX_M2)
+#endif
+#if PAIR_ENABLED (5)
 PAIR_LAT_UNARY (m2_scalable_unmasked, atan, PAIRED_SCAL_M2_LANES, vfloat64m2_t,
                 __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
                 PAIR_CALL_U_SC_M2, lat_pair_zero_m2, lat_pair_add_m2,
@@ -962,6 +996,8 @@ PAIR_LAT_UNARY (m2_scalable_unmasked, atan, PAIRED_SCAL_M2_LANES, vfloat64m2_t,
 PAIR_TPUT_UNARY (m2_scalable_unmasked_tput, atan, PAIRED_SCAL_M2_LANES,
                  vfloat64m2_t, __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
                  PAIR_CALL_U_SC_M2)
+#endif
+#if PAIR_ENABLED (6)
 PAIR_LAT_UNARY_MASKED (m2_fixed_masked, atan, 4, vfloat64m2_t, vbool32_t,
                        __riscv_vmset_m_b32, __riscv_vsm_v_b32,
                        __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
@@ -971,6 +1007,8 @@ PAIR_TPUT_UNARY_MASKED (m2_fixed_masked_tput, atan, 4, vfloat64m2_t, vbool32_t,
                         __riscv_vmset_m_b32, __riscv_vsm_v_b32,
                         __riscv_vle64_v_f64m2, __riscv_vse64_v_f64m2,
                         PAIR_CALL_UM_FIX_M2)
+#endif
+#if PAIR_ENABLED (7)
 PAIR_LAT_UNARY_MASKED (m2_scalable_masked, atan, PAIRED_SCAL_M2_LANES,
                        vfloat64m2_t, vbool32_t, __riscv_vmset_m_b32,
                        __riscv_vsm_v_b32, __riscv_vle64_v_f64m2,
@@ -980,36 +1018,53 @@ PAIR_TPUT_UNARY_MASKED (m2_scalable_masked_tput, atan, PAIRED_SCAL_M2_LANES,
                         vfloat64m2_t, vbool32_t, __riscv_vmset_m_b32,
                         __riscv_vsm_v_b32, __riscv_vle64_v_f64m2,
                         __riscv_vse64_v_f64m2, PAIR_CALL_UM_SC_M2)
+#endif
 
 #endif /* PAIRED_BINARY */
 
 static const pair_probe PAIRED_TABLE[] = {
+#if PAIR_ENABLED (0)
   { "m1_fixed_unmasked", PAIRED_FN_STR "|m1|fixed|unmasked", PAIRED_FN_STR,
     "m1", "fixed", "unmasked", 2, PAIRED_BINARY,
     PAIR_PROBE (m1_fixed_unmasked), PAIR_PROBE (m1_fixed_unmasked_tput) },
+#endif
+#if PAIR_ENABLED (1)
   { "m1_scalable_unmasked", PAIRED_FN_STR "|m1|scalable|unmasked",
     PAIRED_FN_STR, "m1", "scalable", "unmasked", PAIRED_SCAL_M1_LANES,
     PAIRED_BINARY, PAIR_PROBE (m1_scalable_unmasked),
     PAIR_PROBE (m1_scalable_unmasked_tput) },
+#endif
+#if PAIR_ENABLED (2)
   { "m1_fixed_masked", PAIRED_FN_STR "|m1|fixed|masked", PAIRED_FN_STR, "m1",
     "fixed", "masked", 2, PAIRED_BINARY, PAIR_PROBE (m1_fixed_masked),
     PAIR_PROBE (m1_fixed_masked_tput) },
+#endif
+#if PAIR_ENABLED (3)
   { "m1_scalable_masked", PAIRED_FN_STR "|m1|scalable|masked", PAIRED_FN_STR,
     "m1", "scalable", "masked", PAIRED_SCAL_M1_LANES, PAIRED_BINARY,
     PAIR_PROBE (m1_scalable_masked), PAIR_PROBE (m1_scalable_masked_tput) },
+#endif
+#if PAIR_ENABLED (4)
   { "m2_fixed_unmasked", PAIRED_FN_STR "|m2|fixed|unmasked", PAIRED_FN_STR,
     "m2", "fixed", "unmasked", 4, PAIRED_BINARY,
     PAIR_PROBE (m2_fixed_unmasked), PAIR_PROBE (m2_fixed_unmasked_tput) },
+#endif
+#if PAIR_ENABLED (5)
   { "m2_scalable_unmasked", PAIRED_FN_STR "|m2|scalable|unmasked",
     PAIRED_FN_STR, "m2", "scalable", "unmasked", PAIRED_SCAL_M2_LANES,
     PAIRED_BINARY, PAIR_PROBE (m2_scalable_unmasked),
     PAIR_PROBE (m2_scalable_unmasked_tput) },
+#endif
+#if PAIR_ENABLED (6)
   { "m2_fixed_masked", PAIRED_FN_STR "|m2|fixed|masked", PAIRED_FN_STR, "m2",
     "fixed", "masked", 4, PAIRED_BINARY, PAIR_PROBE (m2_fixed_masked),
     PAIR_PROBE (m2_fixed_masked_tput) },
+#endif
+#if PAIR_ENABLED (7)
   { "m2_scalable_masked", PAIRED_FN_STR "|m2|scalable|masked", PAIRED_FN_STR,
     "m2", "scalable", "masked", PAIRED_SCAL_M2_LANES, PAIRED_BINARY,
     PAIR_PROBE (m2_scalable_masked), PAIR_PROBE (m2_scalable_masked_tput) },
+#endif
 };
 
 const pair_probe_group PAIRED_GROUP

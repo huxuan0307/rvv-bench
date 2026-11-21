@@ -1,12 +1,12 @@
 # libmvec 配对性能与延迟框架
 
-[配对驱动](paired_main.c) 持有 `main()`、遍历矩阵并输出协议；[探针模板](paired_probe_impl.inc) 直接调用所选归档的 `_ZGV`。数学实现不包含测试入口。配对支持 atan、atan2、acos、log10，各有 m1/m2、固定/Nx、masked/unmasked 八个 ABI 变体，atan2 参数顺序是 `y,x`。独立的[吞吐框架](../throughput/README.md)使用 `LIBMVEC_CSV,3`；不能用其解析器读取配对协议 2。
+[配对驱动](paired_main.c) 持有 `main()`、遍历矩阵并输出协议；[探针模板](paired_probe_impl.inc) 直接调用所选归档的 `_ZGV`。数学实现不包含测试入口。配对注册 atan、atan2、acos、log10、sin、exp 的双精度公开入口，各定义 m1/m2、固定/Nx、masked/unmasked 八个探针；实际仅能选取所用归档提供的 ABI 格。atan2 参数顺序是 `y,x`。新增注册本身不代表已在目标校准，私有 `_len` 不在此矩阵。独立的[吞吐框架](../throughput/README.md)使用 `LIBMVEC_CSV,3`；不能用其解析器读取配对协议 2。
 
 ## 工作量与依赖
 
 - **延迟**：`B=S=1`，上一次返回值经 `r-r` 和 `seed+(r-r)` 形成真实依赖，下一次调用仍收到原始 seed 位。masked 先清理 inactive 返回 lane，atan2 则把同一个零加到两个 operand。测到的是含加载、桥接和 ABI 代价的调用链，不是纯内核延迟。
 - **吞吐**：独立调用按相同 corpus 前缀和谓词运行；`B` 重复 pass，`S=1,2,4` 控制窗口内的独立 streams。`N` 是每 pass 的标量元素数，`L` 是每调用 lane 数；完整工作量是 `calls=R×K×B×(N/L)`。`N%L!=0` 或 `(N/L)%S!=0` 的点有显式 skip，不改工作量去凑结果。
-- **输入**：显式指定冻结的 binary64 正规、非零输入头与 SHA256 清单；参考必须有限。这不是[精度 oracle](../tests/accuracy/oracles/)的语料。窗口外的编码步距检查和 checksum 可定位问题，但不能代替真值 ULP、特殊值、完整 ABI 或消费者 LTO 验收。
+- **输入**：显式指定冻结的 binary64 正规、非零输入头与 SHA256 清单；参考必须有限。各头须包含 `DATA_COUNT`、`ORACLE_LIMIT`、`input_bits`、`reference_bits`；`second_bits` 仅用于 atan2。若独立吞吐工具的一元头带第二参数占位，先派生严格一元头并锁其 SHA256，保留原头、派生关系和输入/参考位型，不把占位作为第二输入。`exp` 的正输入在仅延迟模式中限为 `x ≤ 709`，在包含吞吐模式中限为 `x ≤ 687`（给正值累加留余量）；有限下溢结果可维持闭环，不代表下溢语义已验。`sin` 不限有限正规输入幅度，但慢归约数据若纳入应单列其分布，避免冒充常见输入。RNE 下只有返回有限数的 active lane 才能用 `r-r` 恢复输入；调度校准需另以 trace 核验冻结前缀返回有限、恢复位型正确。窗口外的编码步距检查和 checksum 可定位问题，但不能代替真值 ULP、特殊值、完整 ABI 或消费者 LTO 验收。
 
 ## 构建
 
@@ -21,9 +21,11 @@ python3 -B "$S/build_latency.py" --protocol paired \
   --rounds 10 --timing-repeat auto --output "$PAIRED_OUT" --tag paired
 ```
 
-- `--only-case m1_fixed_unmasked` 缩小 ABI 范围；`--calib` 增加五个有独立 ID 的延迟对照，用 atan 输入，不冒充函数数据。`--trace --timing-repeat 1` 构建独立的非计时参数位/掩码追踪，不可用来测周期。
+- `--functions sin,exp --only-case m1_fixed_unmasked` 把两个函数的共同 ABI 格装入同一镜像；同一归档/配置下，`--modes both` 可在同一进程测延迟和吞吐。`--only-case` 支持逗号或分号分隔多个公共探针名，同时裁剪编译、所需链接符号和运行矩阵。两侧换归档的性能对比仍需各自的镜像与运行。
+- `--calib` 增加五个有独立 ID 的延迟对照，用 atan 输入，不冒充函数数据。`--trace --timing-repeat 1` 构建独立的非计时参数位/掩码追踪，不可用来测周期。
 - 默认链接安装库。`--math-archive` 只在配对模式启用，必须提供所编译的全部 `_ZGV` 符号；标量参考来自工具链的真实 `libm-2.44.a`，不经自动引入 `libmvec.a` 的 `-lm`。显式传入 `--candidate-id` 标识候选。`--lto` 审计最终链接后的基准，不代表实际消费者的 LTO 验收。
 - 构建目录含 ELF/BIN、编译命令、快照和 SHA256、链接映射、依赖审计及机器用 manifest。`--skip-audit` 只让审计失败的镜像保留下来，不能把失败改为通过；未冻结的语料和审计失败的构建只用于诊断。
+- LTO 依赖自动审计只是筛查。验收须逐格检查最终 ELF：`rdcycle` 确实包围实际目标调用；延迟路径从返回寄存器经过桥接写回下次调用的 ABI 实参并跨回边，不能只有一条未被消费的同源 `vfsub`；吞吐路径的实参从独立种子加载而不是上一次调用的结果。找不到明确计时边界、返回到实参的数据流或独立种子加载，不能仅凭自动审计成功签收。
 
 ## 配对协议 2
 

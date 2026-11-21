@@ -7,6 +7,9 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
+import struct
+import subprocess
 import sys
 import tempfile
 from types import SimpleNamespace
@@ -15,6 +18,7 @@ from unittest.mock import patch
 
 SCRIPT = Path(__file__).resolve().parents[2] / 'script' / 'latency'
 sys.path.insert(0, str(SCRIPT))
+import build_latency as builder
 import paired_parse as wire
 import run_latency
 import run_paired as runner
@@ -129,6 +133,98 @@ class ProtocolTests(unittest.TestCase):
         self.header.write_text('changed after freeze\n')
         with self.assertRaisesRegex(wire.ProtocolError, 'SHA256'):
             wire.load_plan(self.manifest)
+
+    def unary_header(self, fn, inputs, references):
+        path = self.root / f'{fn}.h'
+        words = lambda values: ', '.join(f'0x{value:016x}ULL' for value in values)
+        path.write_text(f'#define DATA_COUNT {len(inputs)}\n#define ORACLE_LIMIT 2\n'
+                        f'static const uint64_t input_bits[DATA_COUNT] = {{{words(inputs)}}};\n'
+                        f'static const uint64_t reference_bits[DATA_COUNT] = {{{words(references)}}};\n')
+        return dict(path=str(path), snapshot=str(path), sha256=wire.common.sha256(path),
+                    DATA_COUNT=len(inputs), ORACLE_LIMIT=2)
+
+    def test_sin_exp_shared_manifest_and_complete_wire(self):
+        manifest = deepcopy(self.manifest)
+        manifest['functions'] = ['exp', 'sin']  # Guest registration order is independent of CLI order.
+        manifest['cases'] = [dict(self.manifest['cases'][0], function=fn,
+                                 case=CASE.replace('atan', fn)) for fn in ('sin', 'exp')]
+        manifest['data']['headers'] = {
+            fn + '.h': self.unary_header(fn, [0x3ff0000000000000, 0x4000000000000000],
+                                        [0x3ff0000000000000, 0x3ff0000000000000])
+            for fn in ('sin', 'exp')}
+        plan = wire.load_plan(manifest)
+        self.assertEqual(tuple(case['function'] for case in plan.cases), ('sin', 'exp'))
+        rows = [self.log[0], self.log[1].replace('atan', 'sin'),
+                self.log[1].replace('atan', 'exp').replace('PAIR_CASE,0,', 'PAIR_CASE,1,')]
+        for i, fn in enumerate(('sin', 'exp')):
+            rows += [row.replace('atan', fn).replace('P,0,', f'P,{i},')
+                     for row in self.log[2:-1]]
+        rows += ['PAIR_END,status=ok,checks=144,failed=0,records=64\n']
+        points, _, checks = wire.parse_wire(rows, plan)
+        self.assertEqual((len(points), checks), (8, 144))
+        for i, old, new in [(1, 'sin', 'sinf'), (2, 'unmasked', 'masked'),
+                            (3, 'a1191300c548b8fb', '0')]:
+            with self.subTest(old=old), self.assertRaises(wire.ProtocolError):
+                wire.parse_wire(rows[:i] + [rows[i].replace(old, new)] + rows[i + 1:], plan)
+        with self.assertRaises(wire.ProtocolError):
+            wire.parse_wire(rows[:-1], plan)
+
+    def test_exp_positive_cap_and_finite_bridge_contract(self):
+        def bits(value):
+            return int.from_bytes(struct.pack('>d', value), 'big')
+
+        for fn, modes, word, ref, error in [
+            ('exp', 'latency', bits(709.0), bits(1.0), None),
+            ('exp', 'latency', bits(709.0) + 1, bits(1.0), 'limit 709'),
+            ('exp', 'both', bits(687.0), bits(1.0), None),
+            ('exp', 'tput', bits(687.0) + 1, bits(1.0), 'limit 687'),
+            ('exp', 'both', bits(-800.0), bits(0.0), None),
+            ('sin', 'both', bits(1e200), bits(0.5), None),
+            ('sin', 'both', bits(-0.0), bits(0.0), 'finite normal seed'),
+            ('sin', 'both', 1, bits(0.0), 'finite normal seed'),
+            ('sin', 'both', bits(1.0), bits(float('inf')), 'finite reference'),
+        ]:
+            with self.subTest(fn=fn, modes=modes, word=word, ref=ref):
+                info = self.unary_header(fn, [word], [ref])
+                snapshot = Path(info['snapshot'])
+                if error:
+                    with self.assertRaisesRegex(wire.ProtocolError, error):
+                        wire.frozen_seeds(snapshot, info, (1,), fn, modes)
+                else:
+                    count, prefix = wire.frozen_seeds(snapshot, info, (1,), fn, modes)
+                    self.assertEqual(count, 1)
+                    self.assertEqual(prefix[1]['unary_fnv'], prefix[1]['pair_fnv'])
+
+    @unittest.skipUnless(shutil.which('cc'), 'host C preprocessor unavailable')
+    def test_shared_unmasked_case_slice_excludes_masked_callee_uses(self):
+        selected = ['m1_fixed_unmasked', 'm1_scalable_unmasked',
+                    'm2_fixed_unmasked', 'm2_scalable_unmasked']
+        args = SimpleNamespace(only_case=','.join(selected), modes='both', vlen=256, calib=False)
+        cases, only_cases = builder.pair_cases(('sin', 'exp'), args)
+        self.assertEqual(only_cases, ';'.join(selected))
+        self.assertEqual([(case['function'], case['lanes']) for case in cases],
+                         [(fn, lanes) for fn in ('sin', 'exp') for lanes in (2, 4, 4, 8)])
+        (self.root / 'riscv_vector.h').write_text('/* Host preprocessing only. */\n')
+        mask = builder.pair_probe_mask(selected)
+        self.assertEqual(mask, 0x33)
+        for fn in ('sin', 'exp'):
+            self.unary_header(fn, [0x3ff0000000000000], [0x3ff0000000000000])
+            cpp = subprocess.run(['cc', '-E', '-P', '-D__riscv_vector=1',
+                f'-DPAIRED_PROBE_MASK={mask}', '-I', str(self.root), '-I',
+                str(builder.REPO / 'autovec'), str(builder.LATENCY / f'paired_{fn}.c')],
+                cwd=self.root, check=True, capture_output=True, text=True).stdout
+            chosen = builder.pair_audit_specs(fn, selected)
+            self.assertEqual(len(chosen), 8)
+            self.assertEqual({spec['callee'] for spec in chosen.values()},
+                             {f'_ZGV{shape}v_{fn}' for shape in ('1N2', '1Nx', '2N4', '2Nx')})
+            for probe, spec in builder.pair_audit_specs(fn).items():
+                # Unselected callee names occur only in their harmless extern declaration.
+                if probe in chosen:
+                    self.assertIn(probe, cpp)
+                    self.assertGreater(cpp.count(spec['callee']), 1)
+                else:
+                    self.assertNotIn(probe, cpp)
+                    self.assertEqual(cpp.count(spec['callee']), 1)
 
     def test_fixed_repeat_cannot_change(self):
         plan = deepcopy(self.manifest)

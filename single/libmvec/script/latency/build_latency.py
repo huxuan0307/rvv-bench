@@ -630,7 +630,8 @@ def audit_noop(objdump, nm, path, outdir, label):
 # ==========================================================================
 # paired exact-input protocol (--protocol paired)
 # ==========================================================================
-PAIRED_FUNCTIONS = ("atan", "atan2", "acos", "log10")
+PAIRED_DEFAULT_FUNCTIONS = ("atan", "atan2", "acos", "log10")
+PAIRED_FUNCTIONS = (*PAIRED_DEFAULT_FUNCTIONS, "sin", "exp")
 PAIRED_UNARY_DEFAULT_N = "128,256"
 PAIRED_ATAN2_DEFAULT_N = "256,512"
 PAIRED_DEFAULT_K = "0,1,2,4,8"
@@ -731,7 +732,13 @@ def pair_cases(functions, args):
     return cases, ";".join(selected)
 
 
-def pair_audit_specs(fn):
+def pair_probe_mask(names):
+    """Encode enabled ABI probe shapes in PAIRED_CASE_DIMS order (see C template)."""
+    return sum(1 << i for i, dims in enumerate(PAIRED_CASE_DIMS)
+               if pair_case_name(*dims) in names)
+
+
+def pair_audit_specs(fn, probes=None):
     """Audit specs for every probe symbol of one function.
 
     Both the latency and the throughput probe of a case are audited; the
@@ -741,6 +748,8 @@ def pair_audit_specs(fn):
     specs = {}
     for lmul, layout, masked in PAIRED_CASE_DIMS:
         name = pair_case_name(lmul, layout, masked)
+        if probes is not None and name not in probes:
+            continue
         lmul_num = 1 if lmul == "m1" else 2
         callee = pair_callee(fn, lmul, layout, masked)
         specs[f"probe_{fn}_{name}"] = dict(
@@ -764,8 +773,13 @@ def pair_defaults(functions):
     return "128,256,512", "4"
 
 
-def validate_paired_header(path, info, *, binary):
-    """Check the frozen binary64 arrays needed by the exact-input bridge."""
+def validate_paired_header(path, info, *, function, modes):
+    """Check the frozen binary64 arrays and the exact-input bridge's domain."""
+    binary = function == "atan2"
+    # exp(709) 非常接近溢出；不把溢出邻域纳入 r-r 闭环。
+    # 吞吐还会累加返回值：exp(687)*2**32 < DBL_MAX，保留舍入余量。
+    exp_max, exp_max_bits = (709, 0x4086280000000000) if modes == "latency" else (
+        687, 0x4085780000000000)
     text = re.sub(r"/\*.*?\*/|//[^\n]*", "", path.read_text(), flags=re.S)
     count = info["DATA_COUNT"]
     if not 1 <= count < 2**32 or not 0 <= info["ORACLE_LIMIT"] < 2**32:
@@ -785,10 +799,15 @@ def validate_paired_header(path, info, *, binary):
                         for f in fields)):
             raise SystemExit(f"{path}: malformed {name}; expected {count} binary64 words")
         for index, field in enumerate(fields):
-            exponent = (int(field.strip()[2:18], 16) >> 52) & 0x7ff
+            word = int(field.strip()[2:18], 16)
+            exponent = (word >> 52) & 0x7ff
             if exponent == 0x7ff or (name != "reference_bits" and exponent == 0):
                 raise SystemExit(f"{path}: {name}[{index}] violates finite normal seed / "
                                  "finite reference contract")
+            if (function == "exp" and name == "input_bits" and
+                    exp_max_bits < word < 1 << 63):
+                raise SystemExit(f"{path}: {name}[{index}] exceeds exp paired {modes} "
+                                 f"limit {exp_max}; keep this input out of performance runs")
 
 
 def load_header_sha_file(path):
@@ -849,6 +868,12 @@ def build_paired(args):
     lengths, batches, klist, streams = (",".join(map(str, values))
                                        for values in (ns, bs, ks, ss))
     cases, only_cases = pair_cases(functions, args)
+    probe_names = {case["probe"] for case in cases if case["function"] != "calib"}
+    # 只跑控制组时保留依赖的 atan TU 和向量归档身份，沿用既有行为。
+    if not probe_names and args.calib:
+        probe_names = {pair_case_name(*dims) for dims in PAIRED_CASE_DIMS}
+    probe_mask = pair_probe_mask(probe_names)
+    audit_specs = {fn: pair_audit_specs(fn, probe_names) for fn in functions}
     if not any(n % case["lanes"] == 0 and (
             "latency" in case["modes"] or
             any((n // case["lanes"]) % s == 0 for s in ss))
@@ -935,7 +960,7 @@ def build_paired(args):
         shutil.copy2(info["path"], dest)
         if sha256(dest) != info["sha256"]:
             raise SystemExit(f"data changed while copying {name}")
-        validate_paired_header(dest, info, binary=(name == "atan2.h"))
+        validate_paired_header(dest, info, function=dest.stem, modes=args.modes)
         info["snapshot"] = str(dest)
 
     lto = bool(args.lto)
@@ -955,8 +980,8 @@ def build_paired(args):
             if stream.read(8) != b"!<arch>\n":
                 raise SystemExit(f"link input must be a regular static archive: {path}")
     archive_sha = sha256(archive)
-    required = {spec["callee"] for fn in functions
-                for spec in pair_audit_specs(fn).values()}
+    required = {spec["callee"] for specs in audit_specs.values()
+                for spec in specs.values()}
     commands = []
     if args.math_archive:
         if archive.samefile(installed):
@@ -1019,7 +1044,8 @@ def build_paired(args):
     func_objs = {}
     for fn in functions:
         func_objs[fn] = compile_tu("paired_" + fn, tdir / f"paired_{fn}.c",
-                                   ["-I", str(frozen), *knobs])
+                                   ["-I", str(frozen), *knobs,
+                                    f"-DPAIRED_PROBE_MASK={probe_mask}"])
     if args.calib:
         compile_tu("paired_calib", tdir / "paired_calib.c", knobs)
     main_obj = compile_tu("paired_main", tdir / "paired_main.c",
@@ -1098,7 +1124,7 @@ def build_paired(args):
                 [str(nm), "-S", "--defined-only", str(obj)],
                 capture_output=True, text=True).stdout
             ranges = symbol_ranges(nm_obj)
-        for sym, spec in pair_audit_specs(fn).items():
+        for sym, spec in audit_specs[fn].items():
             if linked_only:
                 # LTO objects are bytecode: the linked image is the only
                 # disassemblable artifact.  Probe symbols still exist there
@@ -1284,8 +1310,8 @@ def main(argv=None):
                     default="legacy",
                     help="legacy: affine-map latency groups; paired: exact-input "
                          "paired latency+throughput probes")
-    ap.add_argument("--functions", default="atan,atan2,acos,log10",
-                    help="paired: comma list of functions to instantiate")
+    ap.add_argument("--functions", default=",".join(PAIRED_DEFAULT_FUNCTIONS),
+                    help=f"paired: comma list from {','.join(PAIRED_FUNCTIONS)}")
     ap.add_argument("--lengths", default="auto",
                     help="paired: scalar N list; 'auto' uses the design default "
                          "of the selected function(s)")
@@ -1322,8 +1348,9 @@ def main(argv=None):
                     help="paired: sha256sum-style file pinning every frozen "
                          "data header; a mismatch fails the build")
     ap.add_argument("--only-case", default="",
-                    help="paired: ';' separated probe-name allow list, e.g. "
-                         "'m1_fixed_unmasked;m2_fixed_unmasked' (case slice)")
+                    help="paired: comma/semicolon-separated ABI probe allow list, "
+                         "e.g. m1_fixed_unmasked,m2_fixed_unmasked; applies to "
+                         "compilation, link requirements and execution")
     ap.add_argument("--timing-repeat", default="auto",
                     help="paired: 'auto' (default; estimate R per measurement "
                          "point so W >= 40,000 cycles, acceptance floor "

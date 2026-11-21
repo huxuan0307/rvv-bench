@@ -119,6 +119,16 @@ static const pair_function pair_functions[] = {
     pair_log10_seed1_ptr, pair_log10_seed_count, pair_log10_seed_fnv,
     pair_log10_pair_fnv },
 #endif
+#ifdef PAIRED_GROUP_SIN
+  { "sin", &pair_group_sin, pair_sin_seed_init, pair_sin_seed0_ptr,
+    pair_sin_seed1_ptr, pair_sin_seed_count, pair_sin_seed_fnv,
+    pair_sin_pair_fnv },
+#endif
+#ifdef PAIRED_GROUP_EXP
+  { "exp", &pair_group_exp, pair_exp_seed_init, pair_exp_seed0_ptr,
+    pair_exp_seed1_ptr, pair_exp_seed_count, pair_exp_seed_fnv,
+    pair_exp_pair_fnv },
+#endif
 #ifdef PAIRED_GROUP_CALIB
   { "calib", &pair_group_calib, pair_atan_seed_init, pair_atan_seed0_ptr,
     pair_atan_seed1_ptr, pair_atan_seed_count, pair_atan_seed_fnv,

@@ -8,6 +8,8 @@ extern const pair_probe_group pair_group_atan;
 extern const pair_probe_group pair_group_atan2;
 extern const pair_probe_group pair_group_acos;
 extern const pair_probe_group pair_group_log10;
+extern const pair_probe_group pair_group_sin;
+extern const pair_probe_group pair_group_exp;
 extern const pair_probe_group pair_group_calib;
 
 /* Seed identity for one function: convert the frozen header prefixes to
@@ -40,5 +42,19 @@ const double *pair_log10_seed1_ptr (void);
 unsigned pair_log10_seed_count (void);
 uint64_t pair_log10_seed_fnv (unsigned n);
 uint64_t pair_log10_pair_fnv (unsigned n);
+
+void pair_sin_seed_init (unsigned n);
+const double *pair_sin_seed0_ptr (void);
+const double *pair_sin_seed1_ptr (void);
+unsigned pair_sin_seed_count (void);
+uint64_t pair_sin_seed_fnv (unsigned n);
+uint64_t pair_sin_pair_fnv (unsigned n);
+
+void pair_exp_seed_init (unsigned n);
+const double *pair_exp_seed0_ptr (void);
+const double *pair_exp_seed1_ptr (void);
+unsigned pair_exp_seed_count (void);
+uint64_t pair_exp_seed_fnv (unsigned n);
+uint64_t pair_exp_pair_fnv (unsigned n);
 
 #endif /* PAIRED_API_H */

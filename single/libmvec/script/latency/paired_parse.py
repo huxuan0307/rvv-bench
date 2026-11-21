@@ -81,7 +81,7 @@ def file_matches(path, info, what):
             f'{what} 不存在或 SHA256 不匹配：{path}')
 
 
-def frozen_seeds(path, info, ns, binary):
+def frozen_seeds(path, info, ns, function, modes):
     file_matches(path, info, '冻结语料快照')
     count = integer(info['DATA_COUNT'], 'DATA_COUNT', 1, U32_MAX)
     threshold = integer(info['ORACLE_LIMIT'], 'ORACLE_LIMIT', 0, U32_MAX)
@@ -90,7 +90,7 @@ def frozen_seeds(path, info, ns, binary):
         values = re.findall(rf'^\s*#define[ \t]+{key}[ \t]+([0-9]+)[ \t]*$', text, re.M)
         require(values == [str(want)], f'{path}: {key} 与 manifest 不符')
     try:
-        validate_paired_header(path, info, binary=binary)
+        validate_paired_header(path, info, function=function, modes=modes)
     except SystemExit as exc:
         raise ProtocolError(str(exc)) from exc
 
@@ -102,7 +102,7 @@ def frozen_seeds(path, info, ns, binary):
     limit = min(max(ns), count)
     unary = pair = 1469598103934665603
     operands = bits('input_bits')
-    other = bits('second_bits') if binary else None
+    other = bits('second_bits') if function == 'atan2' else None
     result = {}
 
     def fnv(h, value):
@@ -111,7 +111,7 @@ def frozen_seeds(path, info, ns, binary):
     for i, value in enumerate(operands[:limit], 1):
         unary = fnv(unary, value)
         pair = fnv(pair, value)
-        if binary:
+        if other is not None:
             pair = fnv(pair, other[i - 1])
         if i in ns:
             result[i] = {'N': str(i), 'count': str(limit), 'unary_fnv': f'{unary:x}',
@@ -197,7 +197,7 @@ def _load_plan(manifest, headers):
         name = fn + '.h'
         info = identity(data_headers[name], name)
         path = Path(info['snapshot']) if headers is None else headers / name
-        limits[fn], prefix = frozen_seeds(path, info, ns, fn == 'atan2')
+        limits[fn], prefix = frozen_seeds(path, info, ns, fn, modes)
         for n, values in prefix.items():
             seeds[(fn, n)] = {'function': fn, **values}
     if calib:

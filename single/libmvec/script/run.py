@@ -37,7 +37,7 @@ import runner_common as common
 HERE = Path(__file__).resolve().parent
 DEFAULT_SEED = 123456789
 DEFAULT_JOBS = 4
-DEFAULT_GSIM_TIMEOUT = '48h'
+DEFAULT_GSIM_TIMEOUT = '24h'
 DEFAULT_NEMU_TIMEOUT = '120s'
 DEFAULT_MAX_INSTR = 50_000_000
 
@@ -60,7 +60,7 @@ def build_parser():
                             help='case name from the manifest; repeatable')
         target.add_argument('--jobs', type=int, default=DEFAULT_JOBS)
         target.add_argument('--timeout', default=default_timeout,
-                            help='per-case GNU-style duration, e.g. 120s or 48h')
+                            help='per-case duration (e.g. 120s or 24h); none for direct GSIM only')
 
     nemu = sub.add_parser('nemu', help='functional NEMU run')
     add_common(nemu, DEFAULT_NEMU_TIMEOUT)
@@ -95,7 +95,8 @@ def validate_arguments(parser, args):
         if args.max_instr < 1:
             parser.error('max-instr must be positive')
     try:
-        args.timeout_seconds = common.parse_duration(args.timeout)
+        args.timeout_seconds = common.parse_duration(
+            args.timeout, allow_none=args.mode == 'gsim' and args.backend == 'direct')
     except ValueError as exc:
         parser.error(str(exc))
     if args.case is not None:

@@ -105,6 +105,7 @@ python3 -B single/libmvec/script/run.py gsim --manifest <build>/manifest.json \
 
 - `nemu` 只做功能预检；`gsim` 用于性能。gsim 必须显式给 `--emu`（**非 static**）、`--reference`、
   `--dramsim3-ini`，不做隐式版本猜测。
+- direct GSIM 默认单 case 超时 `24h`；只有明确授权不限时才传 `--timeout none`，仍可响应取消并回收进程组。`--jobs 2 --no-smoke` 可让两个已预审 case 同时启动；`--no-smoke` 只跳过初始串行预检，不跳过完成后的严格采集。
 - `--backend run-emu` 通过外部 `run_emu.sh` 调度时必须显式给 `--runner`；直接后端最多 4 并发，
   外部后端 1–32。
 - 运行目录必须全新且带日期时间，不放在 build 路径；每 case 独立 cwd、staged BIN 双 SHA、stdout/stderr
