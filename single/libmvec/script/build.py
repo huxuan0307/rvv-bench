@@ -84,6 +84,8 @@ def main():
     parser.add_argument('--lto',action='store_true',help='enable LTO in benchmark translation units and final link')
     parser.add_argument('--direct-interface',choices=['nx','array'],default='nx',
                         help='direct kernels call Nx vector ABI (default) or array ABI')
+    parser.add_argument('--max-lmul',choices=['2','8'],default='8',
+                        help='cap the measurement matrix at m2, or detect available modes through m8')
     parser.add_argument('--timing-repeat',type=int,default=1,
                         help='kernel repeats inside each rdcycle interval; R>=1, '
                              'not a workload dimension (K stays the call count)')
