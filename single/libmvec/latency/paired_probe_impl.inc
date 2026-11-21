@@ -1020,6 +1020,62 @@ PAIR_TPUT_UNARY_MASKED (m2_scalable_masked_tput, atan, PAIRED_SCAL_M2_LANES,
                         __riscv_vse64_v_f64m2, PAIR_CALL_UM_SC_M2)
 #endif
 
+/* ---- 编译器自动向量化探针 ------------------------------------------- */
+
+/* 只有在自动向量化用例被选中时，构建器才用 -ffast-math -fopenmp-simd
+   和 -mrvv-max-lmul=m1 编译本翻译单元，因此下面的普通循环会被编译器
+   向量化，并生成对 _ZGV1Nxv_<函数> 的调用；探针里没有手写 intrinsic。
+   always_inline 让调用点留在探针符号内，构建器才能审计最终机器码。 */
+#if PAIR_ENABLED (8)
+static double pair_auto_buf[PAIRED_MAX_N] __attribute__ ((aligned (64)));
+
+static __attribute__ ((always_inline)) inline void
+pair_auto_passes (double *x, unsigned n, unsigned passes)
+{
+  for (unsigned p = 0; p < passes; ++p)
+    for (unsigned i = 0; i < n; ++i)
+      x[i] = PAIRED_FN (x[i]);
+}
+
+static void
+PAIR_PROBE (m1_auto) (unsigned round, pair_window *w)
+{
+  const unsigned lanes = PAIRED_SCAL_M1_LANES;
+  const unsigned ncall = pair_n / lanes;
+  const unsigned repeat = pair_repeat ? pair_repeat : 1;
+  const unsigned passes = pair_batch * pair_k * repeat;
+  (void) round;
+  if (ncall == 0)
+    {
+      w->steps = w->calls = 0;
+      w->repeat = repeat;
+      w->begin = 0;
+      w->cycles = 0;
+      w->checksum = PAIR_FNV_INIT;
+      return;
+    }
+  for (unsigned i = 0; i < ncall; ++i)
+    __builtin_memcpy (&pair_auto_buf[i * lanes], PAIR_SEED_AT (i),
+                      lanes * sizeof (double));
+  PAIR_TRACE_INIT (w);
+  w->steps = passes * ncall;
+  w->calls = w->steps;
+  w->repeat = repeat;
+  w->begin = PAIR_WIN_BEGIN ();
+  pair_auto_passes (pair_auto_buf, ncall * lanes, passes);
+  w->cycles = PAIR_WIN_END () - w->begin;
+  /* 用同一条自动向量化链重跑一趟，再按配对口径核对返回值。 */
+  for (unsigned i = 0; i < ncall; ++i)
+    __builtin_memcpy (&pair_auto_buf[i * lanes], PAIR_SEED_AT (i),
+                      lanes * sizeof (double));
+  pair_auto_passes (pair_auto_buf, ncall * lanes, 1);
+  for (unsigned i = 0; i < lanes; ++i)
+    pair_tbuf[i] = pair_auto_buf[i];
+  w->checksum = pair_fnv_buf (PAIR_FNV_INIT, pair_tbuf, lanes);
+  pair_oracle_check (pair_tbuf, lanes, reference_bits, 0, "m1_auto");
+}
+#endif /* PAIR_ENABLED (8) */
+
 #endif /* PAIRED_BINARY */
 
 static const pair_probe PAIRED_TABLE[] = {
@@ -1064,6 +1120,11 @@ static const pair_probe PAIRED_TABLE[] = {
   { "m2_scalable_masked", PAIRED_FN_STR "|m2|scalable|masked", PAIRED_FN_STR,
     "m2", "scalable", "masked", PAIRED_SCAL_M2_LANES, PAIRED_BINARY,
     PAIR_PROBE (m2_scalable_masked), PAIR_PROBE (m2_scalable_masked_tput) },
+#endif
+#if PAIR_ENABLED (8)
+  { "m1_auto", PAIRED_FN_STR "|m1|auto|unmasked", PAIRED_FN_STR, "m1", "auto",
+    "unmasked", PAIRED_SCAL_M1_LANES, PAIRED_BINARY, PAIR_PROBE (m1_auto),
+    PAIR_PROBE (m1_auto) },
 #endif
 };
 

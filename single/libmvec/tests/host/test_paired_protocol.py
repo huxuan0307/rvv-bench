@@ -224,7 +224,12 @@ class ProtocolTests(unittest.TestCase):
                     self.assertGreater(cpp.count(spec['callee']), 1)
                 else:
                     self.assertNotIn(probe, cpp)
-                    self.assertEqual(cpp.count(spec['callee']), 1)
+                    if spec['mode'] == 'latency_auto':
+                        # 自动向量化用例复用 m1 VLMAX 入口，同一符号在其它
+                        # 探针里也会出现，因此只核对它指向的条目。
+                        self.assertEqual(spec['callee'], f'_ZGV1Nxv_{fn}')
+                    else:
+                        self.assertEqual(cpp.count(spec['callee']), 1)
 
     def test_fixed_repeat_cannot_change(self):
         plan = deepcopy(self.manifest)

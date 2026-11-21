@@ -567,7 +567,16 @@ def audit_probe_linked(entry, spec, insns, start, end):
                             f"{entry}: call to {m.group(1)} inside the loop "
                             f"(expected {spec['callee']})")
             notes.append("link policy: resolved call present")
-        if spec["mode"] == "latency":
+        if spec["mode"] == "latency_auto":
+            # 编译器生成的依赖链必然经过内存，没有手写 vfsub 桥接；
+            # 这里要求循环内出现对预期条目的已解析调用。
+            if not call_here:
+                problems.append(
+                    f"{entry}: auto-vectorised latency loop has no resolved "
+                    f"call to {spec['callee']}")
+            notes.append(
+                f"link policy: auto-vectorised call present (vfp={len(fpc)})")
+        elif spec["mode"] == "latency":
             if not sub:
                 problems.append(f"{entry}: linked latency loop lost the "
                                 f"identical-source vfsub bridge")

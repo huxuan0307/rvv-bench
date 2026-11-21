@@ -662,7 +662,10 @@ def parse_timing_repeat(text):
 PAIRED_CASE_DIMS = (("m1", "fixed", False), ("m1", "scalable", False),
                     ("m1", "fixed", True), ("m1", "scalable", True),
                     ("m2", "fixed", False), ("m2", "scalable", False),
-                    ("m2", "fixed", True), ("m2", "scalable", True))
+                    ("m2", "fixed", True), ("m2", "scalable", True),
+                    ("m1", "auto", False))
+# 自动向量化用例只对这两个函数开放。
+PAIRED_AUTO_FUNCTIONS = ("sin", "exp")
 
 
 def pair_callee(fn, lmul, layout, masked):
@@ -672,6 +675,8 @@ def pair_callee(fn, lmul, layout, masked):
     call a _ZGV1 symbol; the prefix is derived from the case, not from a list.
     """
     num = "1" if lmul == "m1" else "2"
+    if layout == "auto":
+        return f"_ZGV1Nxv_{fn}"
     if lmul == "m1":
         plain = "N2" if layout == "fixed" else "Nx"
         masked_suffix = "M2" if layout == "fixed" else "Mx"
@@ -684,6 +689,8 @@ def pair_callee(fn, lmul, layout, masked):
 
 
 def pair_case_name(lmul, layout, masked):
+    if layout == "auto":
+        return f"{lmul}_auto"
     return f"{lmul}_{layout}_{'masked' if masked else 'unmasked'}"
 
 
@@ -712,13 +719,15 @@ def pair_cases(functions, args):
         if fn not in functions:
             continue
         for lmul, layout, masked in PAIRED_CASE_DIMS:
+            if layout == "auto" and fn not in PAIRED_AUTO_FUNCTIONS:
+                continue
             lanes = 2 if lmul == "m1" else 4
-            if layout == "scalable":
+            if layout in ("scalable", "auto"):
                 lanes *= args.vlen // 128
             suffix = "masked" if masked else "unmasked"
             cases.append(dict(case=f"{fn}|{lmul}|{layout}|{suffix}", function=fn,
                               lanes=lanes, probe=pair_case_name(lmul, layout, masked),
-                              modes=modes))
+                              modes=["latency"] if layout == "auto" else modes))
     if args.calib:
         for probe in ("calib_reload", "calib_bridge", "calib_inject8",
                       "calib_inject16", "calib_inject32"):
@@ -753,8 +762,11 @@ def pair_audit_specs(fn, probes=None):
         lmul_num = 1 if lmul == "m1" else 2
         callee = pair_callee(fn, lmul, layout, masked)
         specs[f"probe_{fn}_{name}"] = dict(
-            mode="latency", lmul=lmul_num, binary=(fn == "atan2"),
-            masked=masked, callee=callee)
+            mode="latency_auto" if layout == "auto" else "latency",
+            lmul=lmul_num, binary=(fn == "atan2"), masked=masked,
+            callee=callee)
+        if layout == "auto":
+            continue
         specs[f"probe_{fn}_{name}" + "_tput"] = dict(
             mode="tput", lmul=lmul_num, binary=(fn == "atan2"),
             masked=masked, callee=callee)
@@ -1043,9 +1055,16 @@ def build_paired(args):
     tdir = snap / LATENCY.relative_to(REPO)
     func_objs = {}
     for fn in functions:
+        auto_extra = []
+        if any(case["probe"] == pair_case_name("m1", "auto", False) and
+               case["function"] == fn for case in cases):
+            # 自动向量化探针要求编译器自己生成向量数学调用：打开快速数学、
+            # OpenMP SIMD 并把 LMUL 固定为 m1，探针本身不写任何 intrinsic。
+            auto_extra = ["-ffast-math", "-fopenmp-simd", "-mrvv-max-lmul=m1"]
         func_objs[fn] = compile_tu("paired_" + fn, tdir / f"paired_{fn}.c",
                                    ["-I", str(frozen), *knobs,
-                                    f"-DPAIRED_PROBE_MASK={probe_mask}"])
+                                    f"-DPAIRED_PROBE_MASK={probe_mask}"]
+                                   + auto_extra)
     if args.calib:
         compile_tu("paired_calib", tdir / "paired_calib.c", knobs)
     main_obj = compile_tu("paired_main", tdir / "paired_main.c",
