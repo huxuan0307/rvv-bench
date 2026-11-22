@@ -55,4 +55,22 @@ python3 -B "$S/paired_parse.py" --run "$RUN" --out "$ANALYSIS"
 - `paired_parse.py --manifest FILE --log FILE` 只核对 guest wire，输出 `evidence=diagnostic`，不生成计时 CSV；它不接收旧协议、trace 或不完整前缀。自动短窗预警来自未输出的预测窗；解析核对已有预警，质量仍按实际稳态窗判定。
 - 正式比较需要同配置的独立运行、冻结输入、完整窗口与 oracle、正确 footer、成功退出、单行 RTL Core 0 GOOD TRAP、DiffTest 参考及无错误/禁用证据。trace 镜像只用于参数位追踪，不由当前计时运行器验收；不同模拟器不做性能 A/B。
 
+## 快速迭代流水线
+
+[iterate_paired.py](../script/latency/iterate_paired.py)把「建镜像 → NEMU 预检 → GSIM → 汇总表」串成一条命令：每个 `(函数, 探针)` 单独建镜像并并行推进，墙钟由最慢单元决定。它不改变协议口径，只是把窗口压到刚过门限并并行化，用于实现迭代期的「这一版能不能接受」；正式证据仍用 `--profile full` 复核。
+
+```sh
+python3 -B "$S/iterate_paired.py" --prefix "$PREFIX" --data-dir "$DATA" \
+  --header-sha-file "$DATA/SHA256SUMS" --emu "$EMU" --reference "$REF" \
+  --dramsim3-ini "$DRAM_INI" --functions sin,exp \
+  --probes m1_scalable_unmasked,m1_auto --profile fast --jobs 4 \
+  --output "$OUT" --pair-check --timeout 2h
+```
+
+- `--profile fast`：`K=1`、固定 `R=6`、仍取 8 轮（稳态窗不少于 5 个），墙钟约为 `full` 的三分之一；`--profile full` 即 `K=1,2`、`R=auto` 的正式档。
+- `--pair-check` 打印自动向量化链相对手写链的差，用于确认两套调用方式仍然一致。
+- 门限：`quality=eligible`、最短窗 ≥20,000 cycles、稳态窗 ≥5、样本 CV ≤1%；任一不满足则以非零状态退出并在 `summary.csv` 的 `gate` 列写明原因。
+- `summary.csv` 每行一个 `(函数, 探针, K)`：`median_cycles_per_call` 单次调用中位周期、`min_window_cycles` 最短窗、`sample_cv`、`quality`、`gate`。
+- 已验证的档位等效性：`fast` 与 `full` 的手写链差 0.03%，自动向量化链差 0.03%（`sin`）与 0.26%（`exp`），见任务数据的 `fast-vs-full.csv`；NEMU 预检每镜像单独进程执行，因为参考模型在同一进程内不能重复运行。
+
 历史闭环延迟（`LAT_*`）见[历史延迟与扩展方法](INTEGRATION.zh.md)。
