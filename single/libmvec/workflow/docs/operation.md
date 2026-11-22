@@ -99,6 +99,35 @@ export TEST_TMPDIR=$(mktemp -d "$RUN/fixtures-XXXXXX")
 
 不完整写入应停止使用并由 Lead 恢复：文件锁防止合作进程并发推进，但不是跨 CSV 的断电事务，也不是对恶意修改者的安全隔离。缺失/破损行可能报输入错误或阻断；不能宣称具备签名、崩溃自动恢复或自动认证 DSH 事件的能力。
 
+## G4 快速迭代档（测量档位与自动选参）
+
+G4 的性能测量有两种档位，共用同一套协议、窗口门限和统计口径，只是成本与精度不同。**迭代期用 fast 档，正式证据用 full 档**；fast 档的数值不能直接当作 G4 交付结论。
+
+| 档位 | 延迟（`script/latency/iterate_paired.py`） | 吞吐（`script/iterate_throughput.py`） |
+|---|---|---|
+| 每条命令做什么 | 每个 (函数, 探针) 单独建镜像 → NEMU 预检 → GSIM → 汇总 CSV，镜像并行 | 每个 (函数, 模式) 单独建镜像 → NEMU 预检 → 分片 GSIM → 汇总 CSV |
+| 快档参数 | `K=1`、8 轮、`R` 由构建器 `--timing-repeat auto` 自选（目标 40,000） | `R` 按 `30,000 ÷ (N·K·预期周期/元素)` 逐模式自选，可 `--retry-short-window` 自动放大重跑 |
+| 实测墙钟 | 4 单元并行约 **6–7 分钟** | 20 镜像并行约 **20 分钟**（单镜像 13–20 分钟） |
+| 与 full 档误差 | 手写链 ≤0.03%；自动向量化链 ≤1%（运行间波动约 0.8%） | ≤0.32%（最大 `exp` auto_m8），多数 ≤0.13% |
+| 正式档命令 | 追加 `--profile full`（`K=1,2`） | 追加 `--profile full`（`R=32`） |
+
+命令模板（`S` 为 `rvv-bench/single/libmvec/script`，`DATA` 为冻结输入目录，`OUT` 为带日期时间的全新目录）：
+
+```bash
+python3 -B "$S/latency/iterate_paired.py" --prefix "$PREFIX" --data-dir "$DATA" \
+  --header-sha-file "$DATA/SHA256SUMS" --emu "$EMU" --reference "$REF" \
+  --dramsim3-ini "$DRAM_INI" --functions sin,exp \
+  --probes m1_scalable_unmasked,m1_auto --jobs 4 --output "$OUT" --pair-check
+python3 -B "$S/iterate_throughput.py" --prefix "$PREFIX" --data-dir "$FROZEN" \
+  --case sin,exp --emu "$EMU" --reference "$REF" --dramsim3-ini "$DRAM_INI" \
+  --jobs 20 --r-cache "$TASK/data/r-cache.json" --output "$OUT"
+```
+
+- 每条命令都自带门限：`quality=eligible`、最短稳态窗 ≥20,000 原始周期、稳态窗数（吞吐 7 / 延迟 5）、CV ≤1%，任一不满足就非零退出并在 `summary.csv` 的 `gate` 列写明原因。
+- 选参自动化：吞吐的 `--r-cache` 会把本轮实测的周期/元素回写，下次直接命中（实现变快变慢都会跟随）；延迟的 `R` 由构建器预测窗自选，不需要手调。**门限不达标时不要手工改 CSV，按提示放大 R 重跑或改成 full 档。**
+- 墙钟下限由仿真器启动决定，与窗口长度基本无关：单镜像约 64–70 万访客周期启动开销，gsim 约 1,000–1,400 周期/秒，因此单用例下限约 8–11 分钟；并发越多单镜像越慢。要突破只能走快照/gcpt 或换仿真器，并需另行校准。
+- fast 档只用于判断「这一版是否退化」。正式 G4 仍按 [checklist](checklist.md) 的 G4 要求跑 full 档，并把 `--profile full` 的独立运行作为证据；档位、`R`、镜像与仿真器身份统一登记到 [证据 schema](evidence-schema.md)。
+
 ## 写入、运行与发布边界
 
 - 所有正式代码仅在任务目录的对应 `worktree/` 中修改；隔离共享分支和安装前缀，不动其他会话未提交现场。每一仓库单独检查 diff 和暂存。
