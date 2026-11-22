@@ -11,13 +11,12 @@ import iterate_paired as pipeline  # noqa: E402
 
 class ProfileTests(unittest.TestCase):
     def test_fast_keeps_protocol_windows(self):
-        # fast 只压窗口长度，稳态窗口数与协议门限不变。
+        # fast 只压窗口长度，稳态窗口数与协议门限不变；R 交给构建器自校准。
         fast = pipeline.PROFILES['fast']
         self.assertEqual(fast['rounds'], 8)
         self.assertEqual(fast['k'], '1')
         self.assertEqual(fast['streams'], '1')
-        # 快档的 R 由 pick_r 逐单元推算，占位符是 adaptive。
-        self.assertEqual(fast['timing_repeat'], 'adaptive')
+        self.assertEqual(fast['timing_repeat'], 'auto')
 
     def test_full_matches_accepted_protocol(self):
         full = pipeline.PROFILES['full']
@@ -26,21 +25,13 @@ class ProfileTests(unittest.TestCase):
         self.assertEqual(full['timing_repeat'], 'auto')
 
     def test_profile_flags_are_forwarded(self):
-        flags = pipeline.profile_flags('fast', '4')
+        flags = pipeline.profile_flags('fast')
         self.assertEqual(flags[flags.index('--paired-k') + 1], '1')
         self.assertEqual(flags[flags.index('--rounds') + 1], '8')
-        self.assertEqual(flags[flags.index('--timing-repeat') + 1], '4')
-
-    def test_adaptive_profile_needs_explicit_r(self):
-        # 快档的 R 由 pick_r 逐单元推算，不能把 'adaptive' 字面量送进构建器。
-        with self.assertRaises(ValueError):
-            pipeline.profile_flags('fast')
-
-    def test_pick_r_fills_window(self):
-        # 单轮调用数 64（N=128、VL=2）；目标 40,000 周期（与正式档 R=auto 同量级）。
-        self.assertEqual(pipeline.pick_r(64, 134.83), 5)
-        self.assertEqual(pipeline.pick_r(64, 91.89), 7)
-        self.assertEqual(pipeline.pick_r(64, 1000.0), 1)
+        self.assertEqual(flags[flags.index('--timing-repeat') + 1], 'auto')
+        full = pipeline.profile_flags('full')
+        self.assertEqual(full[full.index('--timing-repeat') + 1], 'auto')
+        self.assertEqual(full[full.index('--paired-k') + 1], '1,2')
 
 
 def row(**overrides):

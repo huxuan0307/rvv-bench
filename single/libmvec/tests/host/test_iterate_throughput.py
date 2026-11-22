@@ -51,6 +51,28 @@ class ProfileTests(unittest.TestCase):
         # 极快单元格也不会超过协议上限 64。
         self.assertEqual(pipeline.pick_r(128, 1, 0.5), 64)
 
+    def test_bump_r_when_window_short(self):
+        # 实测窗口只有 18k、目标 30k：按比例放大并留 20% 余量。
+        self.assertEqual(pipeline.bump_r(3, 18_000, 30_000), 6)
+        self.assertEqual(pipeline.bump_r(1, 5_000, 30_000), 8)
+        # 上限 64，且至少加一。
+        self.assertEqual(pipeline.bump_r(64, 1_000, 30_000), 64)
+        self.assertEqual(pipeline.bump_r(5, 0, 30_000), 10)
+
+    def test_r_cache_roundtrip(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'r-cache.json'
+            pipeline.save_cache(path, {'sin|auto_m1': 66.12, 'exp|scalar_fast': 9.32})
+            loaded = pipeline.load_cache(path)
+        self.assertAlmostEqual(loaded['sin|auto_m1'], 66.12)
+        self.assertAlmostEqual(loaded['exp|scalar_fast'], 9.32)
+
+    def test_missing_cache_is_empty(self):
+        # 没有缓存文件时退回内置表，不能抛异常。
+        self.assertEqual(pipeline.load_cache(None), {})
+        self.assertEqual(pipeline.load_cache(Path('/nonexistent/r-cache.json')), {})
+
     def test_steady_window_rule(self):
         # 前 3 轮预热、后 7 轮 steady，与正式解析一致。
         self.assertFalse(pipeline.phase_steady(0))

@@ -22,7 +22,6 @@ import argparse
 import concurrent.futures as futures
 import csv
 import json
-import math
 import os
 import shutil
 import subprocess
@@ -36,27 +35,14 @@ PY = sys.executable
 
 # 迭代档位：fast 只压窗口，不减少稳态窗口数，也不改协议口径。
 PROFILES = {
-    # 快档不固定 R：按窗口目标逐单元推算（见 pick_r 与 CPC）。
-    'fast': dict(rounds=8, k='1', streams='1', timing_repeat='adaptive',
+    # 快档交给构建器的 auto：预测窗按 40,000 周期目标自选 R，实现变化无需改表。
+    'fast': dict(rounds=8, k='1', streams='1', timing_repeat='auto',
                  lengths='128', batches='1'),
     'full': dict(rounds=8, k='1,2', streams='1', timing_repeat='auto',
                  lengths='128', batches='1'),
 }
 
 WINDOW_MIN = 20_000
-TARGET_WINDOW = 40_000
-# 单次调用周期（已安装库实测），只用于把窗口选到目标量级。
-CPC = {
-    ('sin', 'm1_scalable_unmasked'): 134.83, ('sin', 'm1_auto'): 132.75,
-    ('exp', 'm1_scalable_unmasked'): 91.89, ('exp', 'm1_auto'): 90.91,
-}
-DEFAULT_CPC = 100.0
-
-
-def pick_r(calls_per_round: int, cpc: float, target: int = TARGET_WINDOW) -> int:
-    """按窗口目标反推 R：window ≈ calls_per_round·R·cpc。"""
-    value = math.ceil(target / max(calls_per_round * cpc, 1e-9))
-    return max(1, min(64, value))
 CV_LIMIT = 1e-2
 MIN_STEADY = 5
 
@@ -107,25 +93,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return ap.parse_args(argv)
 
 
-def profile_flags(profile: str, timing_repeat: str | None = None) -> list[str]:
+def profile_flags(profile: str) -> list[str]:
     spec = PROFILES[profile]
-    repeat = timing_repeat or spec['timing_repeat']
-    if repeat == 'adaptive':
-        raise ValueError('adaptive 档必须由调用方给出具体 R')
     return ['--rounds', str(spec['rounds']), '--paired-k', spec['k'],
             '--streams', spec['streams'],
-            '--timing-repeat', repeat,
+            '--timing-repeat', spec['timing_repeat'],
             '--lengths', spec['lengths'], '--batches', spec['batches']]
 
 
 def build_image(args, out: Path, function: str, probe: str) -> dict:
     """建一个只含该 (函数, 探针) 的镜像，返回镜像目录与清单信息。"""
-    repeat = None
-    if PROFILES[args.profile]['timing_repeat'] == 'adaptive':
-        lanes = 2  # m1 VLMAX / 固定 m1 用例的 lanes
-        calls_per_round = int(PROFILES[args.profile]['lengths'].split(',')[0]) // lanes
-        cpe = CPC.get((function, probe), DEFAULT_CPC)
-        repeat = str(pick_r(calls_per_round, cpe))
     image = out / 'build' / f'{function}-{probe}'
     argv = [PY, '-B', str(HERE / 'build_latency.py'),
             '--protocol', 'paired',
@@ -138,7 +115,7 @@ def build_image(args, out: Path, function: str, probe: str) -> dict:
             '--vlen', '128',
             '--serial', '1',
             '--tag', f'{function}-{probe}',
-            *profile_flags(args.profile, repeat)]
+            *profile_flags(args.profile)]
     if args.header_sha_file:
         argv += ['--header-sha-file', args.header_sha_file]
     # 配对构建默认开 LTO；保持与已验收测量一致。
