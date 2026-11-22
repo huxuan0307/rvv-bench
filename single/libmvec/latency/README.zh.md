@@ -67,10 +67,10 @@ python3 -B "$S/iterate_paired.py" --prefix "$PREFIX" --data-dir "$DATA" \
   --output "$OUT" --pair-check --timeout 2h
 ```
 
-- `--profile fast`：`K=1`、`R` 按「40,000 窗口目标 ÷ (单轮调用数 × 预期单次周期)」逐单元推算（`sin`→5、`exp`→7）、仍取 8 轮（稳态窗不少于 5 个）；`--profile full` 即 `K=1,2`、`R=auto` 的正式档。
+- `--profile fast`：`K=1`、仍取 8 轮（稳态窗不少于 5 个）。`R` 交给构建器的 `--timing-repeat auto`：先用一个不计入正式轮次的预测窗按 40,000 周期目标自选 `R`，所以实现变快变慢都不用手工调参；`--profile full` 即 `K=1,2` 的正式档。
 - `--pair-check` 打印自动向量化链相对手写链的差，用于确认两套调用方式仍然一致。
 - 门限：`quality=eligible`、最短窗 ≥20,000 cycles、稳态窗 ≥5、样本 CV ≤1%；任一不满足则以非零状态退出并在 `summary.csv` 的 `gate` 列写明原因。
 - `summary.csv` 每行一个 `(函数, 探针, K)`：`median_cycles_per_call` 单次调用中位周期、`min_window_cycles` 最短窗、`sample_cv`、`quality`、`gate`。
-- 已验证的档位等效性：`fast` 与 `full` 的手写链差 0.03%，自动向量化链差 0.03%（`sin`）与 0.26%（`exp`），见任务数据的 `fast-vs-full.csv`；NEMU 预检每镜像单独进程执行，因为参考模型在同一进程内不能重复运行。
+- 已验证的档位等效性：手写链与正式档差 ≤0.03%；自动向量化链在 `exp` 差 +0.03%，但 `sin` 自动链实测有约 0.8% 的运行间波动（同 `R=5`、同 42k 窗口两轮给出 132.7500 与 131.7500），所以自动链的误差承诺是 ≤1%，手写链 ≤0.03%。NEMU 预检每镜像单独进程执行，因为参考模型在同一进程内不能重复运行。
 
 历史闭环延迟（`LAT_*`）见[历史延迟与扩展方法](INTEGRATION.zh.md)。
