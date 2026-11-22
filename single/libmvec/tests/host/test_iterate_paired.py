@@ -37,9 +37,9 @@ class ProfileTests(unittest.TestCase):
             pipeline.profile_flags('fast')
 
     def test_pick_r_fills_window(self):
-        # 单轮调用数 64（N=128、VL=2）；目标 24,000 周期。
-        self.assertEqual(pipeline.pick_r(64, 134.83), 3)
-        self.assertEqual(pipeline.pick_r(64, 91.89), 5)
+        # 单轮调用数 64（N=128、VL=2）；目标 40,000 周期（与正式档 R=auto 同量级）。
+        self.assertEqual(pipeline.pick_r(64, 134.83), 5)
+        self.assertEqual(pipeline.pick_r(64, 91.89), 7)
         self.assertEqual(pipeline.pick_r(64, 1000.0), 1)
 
 

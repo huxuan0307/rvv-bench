@@ -44,7 +44,7 @@ PROFILES = {
 }
 
 WINDOW_MIN = 20_000
-TARGET_WINDOW = 24_000
+TARGET_WINDOW = 40_000
 # 单次调用周期（已安装库实测），只用于把窗口选到目标量级。
 CPC = {
     ('sin', 'm1_scalable_unmasked'): 134.83, ('sin', 'm1_auto'): 132.75,

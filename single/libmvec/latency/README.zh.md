@@ -67,7 +67,7 @@ python3 -B "$S/iterate_paired.py" --prefix "$PREFIX" --data-dir "$DATA" \
   --output "$OUT" --pair-check --timeout 2h
 ```
 
-- `--profile fast`：`K=1`、`R` 按「24,000 窗口目标 ÷ (单轮调用数 × 预期单次周期)」逐单元推算（`sin`→3、`exp`→5）、仍取 8 轮（稳态窗不少于 5 个）；`--profile full` 即 `K=1,2`、`R=auto` 的正式档。
+- `--profile fast`：`K=1`、`R` 按「40,000 窗口目标 ÷ (单轮调用数 × 预期单次周期)」逐单元推算（`sin`→5、`exp`→7）、仍取 8 轮（稳态窗不少于 5 个）；`--profile full` 即 `K=1,2`、`R=auto` 的正式档。
 - `--pair-check` 打印自动向量化链相对手写链的差，用于确认两套调用方式仍然一致。
 - 门限：`quality=eligible`、最短窗 ≥20,000 cycles、稳态窗 ≥5、样本 CV ≤1%；任一不满足则以非零状态退出并在 `summary.csv` 的 `gate` 列写明原因。
 - `summary.csv` 每行一个 `(函数, 探针, K)`：`median_cycles_per_call` 单次调用中位周期、`min_window_cycles` 最短窗、`sample_cv`、`quality`、`gate`。
