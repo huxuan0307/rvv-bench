@@ -17,12 +17,12 @@
 
 对当前下游齐次 float/double 一元和二元签名：`_ZGV{LMUL}{N|M}{lanes|x}{v或vv}_{scalar}`。定长 lanes = `128 / SEW × LMUL`（架构 ABI 基线，不是按实测 VLEN 重命名）；例 double 二元 `_ZGV2M4vv_atan2`，可伸缩 `_ZGV2Mxvv_atan2`。`x` 是可伸缩向量接口，**不表示传入显式长度参数**。例如 public `_ZGV2Mxv_log(mask,x)` 与 private `_ZGV2Mxv_log_len(n,mask,x)` 有不同签名，后者不能抵一格。其它参数类型、混合精度、非齐次返回或特殊调用约定须另立 ABI 设计，不能套此公式。
 
-## G1a → pilot → G1b：先确定谁可以发出哪一位
+## G1a →先导验证→ G1b：先确定谁可以发出哪一位
 
 1. 固定 GCC、glibc、外层 gitlink 和目标配置，逐层比对 GCC 可生成集合、glibc manifest 集合、安装头实际声明与导出集。`__riscv_simd_math_abi_v1_lmul8` 只代表编译器理解 16 位，不代表库实现 16 格。
 2. GCC 的 `gcc/config/riscv/riscv.cc` 中核查 `riscv_simd_math_table` 对名称、原型、arity、模式、位和 legacy 的支持；不在表中的新函数不能只改 glibc。给新名字补匹配/拒绝和 DejaGnu 测试；没有历史 ABI 的函数不要赋予非零 legacy mask。检查 `simd(inbranch/notinbranch)` 与可用位交集、旧编译器低八位、零位与 LTO 混合声明。
 3. 区分库对必做格的实现义务和编译器按目标选择的资格。用基线 `rv64gcv/lp64d` 验正例；较大最小 VLEN 下 fixed M 应不被 GCC 选择（不是少实现一格），scalable M 与 fixed N 单独验证。LMUL4/8 正例使用允许宽度的 `-mrvv-max-lmul`；另验低上限不发宽调用。匹配 `-mrvv-vector-bits`、fast-math、向量化开关，预先约定预期选中或合法回退，不能把每个应用循环都必须选中写成契约。
-4. 设计双向失配和有条件的编译实验：新 GCC/旧 sysroot、旧 GCC/新 sysroot、`--disable-mathvec`、无 V 或不同 ABI、不满足 fast-math、禁用某可选位。要求不产生不存在的动态或静态引用；同一函数多 TU / LTO 两种链接次序测试。G1a 批准后才 pilot；抽一必做格贯通真正的安装头、应用目标文件、库、执行，再冻结 G1b 基线，不提前宣称全矩阵通过。
+4. 设计双向失配和有条件的编译实验：新 GCC/旧 sysroot、旧 GCC/新 sysroot、`--disable-mathvec`、无 V 或不同 ABI、不满足 fast-math、禁用某可选位。要求不产生不存在的动态或静态引用；同一函数多 TU / LTO 两种链接次序测试。G1a 批准后才做先导验证；抽一必做格贯通真正的安装头、应用目标文件、库、执行，再冻结 G1b 基线，不提前宣称全矩阵通过。
 
 ## G2：在 glibc 内实现，而非停在测试仓库
 

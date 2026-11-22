@@ -51,7 +51,7 @@ GATE_ORDER: Dict[str, int] = {g: i for i, g in enumerate(GATES)}
 GATE_TITLES: Dict[str, str] = {
     "G0": "契约、范围与预注册矩阵冻结",
     "G1a": "设计与测量协议冻结",
-    "G1b": "同源基线与环境冻结（pilot）",
+    "G1b": "同源基线与环境冻结（先导验证）",
     "G2": "候选预筛",
     "G3": "最终正确性与 ABI",
     "G4": "最终性能",
