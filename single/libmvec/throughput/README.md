@@ -136,6 +136,27 @@ python3 -B single/libmvec/script/perf_compare.py --function log --n 128 --k 1 4 
   `--max-regression` 是回退百分比上限（默认 5%，仅作筛选，不是正确性证明），`--output` 必须是新文件。
   单次运行比较只用于筛选，必须具备同配置的另一独立复跑；不同模拟器、不同窗口或未验收数据不得混算。
 
+## 快速迭代流水线（`script/iterate_throughput.py`）
+
+一条命令串起「建单模式镜像 → NEMU 预检 → GSIM → 汇总表」：一个函数建一份 `--split-modes`
+清单（每个测量模式一个镜像），镜像之间并行仿真，`run.py` 的 `--jobs` 上限 4，因此流水线按 4 个
+镜像一片切开并行；墙钟由最慢的镜像决定。
+
+```sh
+python3 -B "$S/iterate_throughput.py" --prefix "$PREFIX" --data-dir "$DATA" \
+  --case sin,exp --emu "$EMU" --reference "$REF" --dramsim3-ini "$DRAM_INI" \
+  --profile fast --jobs 10 --output "$OUT" --pair-check --timeout 24h
+```
+
+- `--profile fast`（默认）：`R=20`，最慢的单元格（`exp` 标量约 9.3 周期/元素）仍有
+  128×20×9.3 ≈ 23,800 原始周期，高于 20,000 门限；`--profile full` 是 `R=32` 的正式档。
+- 统计口径与正式解析一致：十轮中前 3 轮预热、后 7 轮 steady，`cycles_per_element` =
+  steady 中位窗口周期 ÷ R ÷ (N·K)；控制列（`rdcycle`/`empty`/`copy`）不作为吞吐。
+- 门限：root 7 个 steady 窗口、每个 ≥20,000 原始周期、CV ≤1%、运行与测量状态均为 passed；
+  任一不满足则非零退出，并在 `summary.csv` 的 `gate` 列写明原因。
+- `--pair-check` 打印自动向量化相对直接调用的差（`auto_mN` vs `direct_mN`），用于确认两套调用路径仍一致。
+- NEMU 预检每镜像独立进程执行（参考模型在同一进程内不能重复运行），并按清单 `required_markers` 判定。
+
 ## 测量与证据边界
 
 - 先缓冲全部样本再打印；oracle、初始化、校验、checksum、打印都在计时外。`rdcycle` 控制只读一对
