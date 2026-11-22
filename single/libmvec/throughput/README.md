@@ -148,14 +148,18 @@ python3 -B "$S/iterate_throughput.py" --prefix "$PREFIX" --data-dir "$DATA" \
   --profile fast --jobs 10 --output "$OUT" --pair-check --timeout 24h
 ```
 
-- `--profile fast`（默认）：`R=20`，最慢的单元格（`exp` 标量约 9.3 周期/元素）仍有
-  128×20×9.3 ≈ 23,800 原始周期，高于 20,000 门限；`--profile full` 是 `R=32` 的正式档。
+- `--profile fast`（默认）：每个模式单独建镜像，`R` 按「窗口目标 ÷ (N·K·预期周期每元素)」
+  逐模式推算（默认目标 30,000 原始周期，预期值取自已验收实测表），所以标量镜像用 R=3–26、
+  向量镜像用 R=4–14，所有镜像的稳态窗都落在 30k 量级；`--profile full` 是 `R=32` 的正式档。
 - 统计口径与正式解析一致：十轮中前 3 轮预热、后 7 轮 steady，`cycles_per_element` =
   steady 中位窗口周期 ÷ R ÷ (N·K)；控制列（`rdcycle`/`empty`/`copy`）不作为吞吐。
 - 门限：root 7 个 steady 窗口、每个 ≥20,000 原始周期、CV ≤1%、运行与测量状态均为 passed；
   任一不满足则非零退出，并在 `summary.csv` 的 `gate` 列写明原因。
 - `--pair-check` 打印自动向量化相对直接调用的差（`auto_mN` vs `direct_mN`），用于确认两套调用路径仍一致。
 - NEMU 预检每镜像独立进程执行（参考模型在同一进程内不能重复运行），并按清单 `required_markers` 判定。
+- 墙钟下限由仿真器启动决定，不由窗口长度决定：SoC 启动约 64–70 万周期、gsim 约 1,000–1,400
+  周期/秒，因此单镜像下限约 8–11 分钟；并把 20 路并发会互相拖慢。见任务的
+  `data/fast-profile-equivalence/iteration-cost.csv`。
 
 ## 测量与证据边界
 

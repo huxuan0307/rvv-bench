@@ -41,8 +41,15 @@ class ProfileTests(unittest.TestCase):
                                     '--reference', 'r', '--dramsim3-ini', 'i',
                                     '--output', 'o'])
         self.assertEqual(args.profile, 'fast')
-        self.assertEqual(pipeline.PROFILES['fast'], 20)
+        self.assertEqual(pipeline.PROFILES['fast'], 'adaptive')
         self.assertEqual(pipeline.PROFILES['full'], 32)
+
+    def test_pick_r_fills_window(self):
+        # sin 标量约 92.85 周期/元素、exp 标量约 9.32：都落在 30k 窗口量级。
+        self.assertEqual(pipeline.pick_r(128, 1, 92.85), 3)
+        self.assertEqual(pipeline.pick_r(128, 1, 9.32), 26)
+        # 极快单元格也不会超过协议上限 64。
+        self.assertEqual(pipeline.pick_r(128, 1, 0.5), 64)
 
     def test_steady_window_rule(self):
         # 前 3 轮预热、后 7 轮 steady，与正式解析一致。

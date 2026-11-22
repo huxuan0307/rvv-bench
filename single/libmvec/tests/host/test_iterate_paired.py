@@ -16,7 +16,8 @@ class ProfileTests(unittest.TestCase):
         self.assertEqual(fast['rounds'], 8)
         self.assertEqual(fast['k'], '1')
         self.assertEqual(fast['streams'], '1')
-        self.assertGreaterEqual(int(fast['timing_repeat']), 1)
+        # 快档的 R 由 pick_r 逐单元推算，占位符是 adaptive。
+        self.assertEqual(fast['timing_repeat'], 'adaptive')
 
     def test_full_matches_accepted_protocol(self):
         full = pipeline.PROFILES['full']
@@ -25,10 +26,21 @@ class ProfileTests(unittest.TestCase):
         self.assertEqual(full['timing_repeat'], 'auto')
 
     def test_profile_flags_are_forwarded(self):
-        flags = pipeline.profile_flags('fast')
+        flags = pipeline.profile_flags('fast', '4')
         self.assertEqual(flags[flags.index('--paired-k') + 1], '1')
         self.assertEqual(flags[flags.index('--rounds') + 1], '8')
-        self.assertEqual(flags[flags.index('--timing-repeat') + 1], '6')
+        self.assertEqual(flags[flags.index('--timing-repeat') + 1], '4')
+
+    def test_adaptive_profile_needs_explicit_r(self):
+        # 快档的 R 由 pick_r 逐单元推算，不能把 'adaptive' 字面量送进构建器。
+        with self.assertRaises(ValueError):
+            pipeline.profile_flags('fast')
+
+    def test_pick_r_fills_window(self):
+        # 单轮调用数 64（N=128、VL=2）；目标 24,000 周期。
+        self.assertEqual(pipeline.pick_r(64, 134.83), 3)
+        self.assertEqual(pipeline.pick_r(64, 91.89), 5)
+        self.assertEqual(pipeline.pick_r(64, 1000.0), 1)
 
 
 def row(**overrides):
